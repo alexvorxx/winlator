@@ -281,6 +281,7 @@
     <string name="exposed_extensions" translatable="false">Exposed Extensions</string>
     <string name="image_cache_size" translatable="false">Image Cache Size</string>
     <string name="resource_memory_type" translatable="false">Resource Memory Type</string>
+    <string name="vortek_render_version" translatable="false">Render version</string>
     <string name="box64_rc_file">Box64 RCFile</string>
     <string name="filter">Filter</string>
     <string name="all">All</string>

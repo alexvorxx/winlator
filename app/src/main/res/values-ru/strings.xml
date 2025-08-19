@@ -275,6 +275,7 @@
     <string name="exposed_extensions" translatable="false">Доступные расширения</string>
     <string name="image_cache_size" translatable="false">Размер кэша изображений</string>
     <string name="resource_memory_type" translatable="false">Тип памяти для ресурсов</string>
+    <string name="vortek_render_version">Версия рендера</string>
     <string name="box64_rc_file">Box64 RCFile</string>
     <string name="filter">Фильтр</string>
     <string name="all">Все</string>

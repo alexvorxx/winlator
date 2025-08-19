@@ -33,20 +33,29 @@ public class VortekRendererComponent extends EnvironmentComponent implements Con
   private final UnixSocketConfig socketConfig;
   
   private final XServer xServer;
-  
-  static {
+
+  private final String renderName;
+
+  /*static {
     System.loadLibrary("vortekrenderer");
-  }
-  
-  public VortekRendererComponent(XServer paramXServer, UnixSocketConfig paramUnixSocketConfig, Options paramOptions) {
+  }*/
+
+  public VortekRendererComponent(XServer paramXServer, UnixSocketConfig paramUnixSocketConfig, Options paramOptions, String paramRenderName) {
     this.xServer = paramXServer;
     this.socketConfig = paramUnixSocketConfig;
     this.options = paramOptions;
+    this.renderName = paramRenderName;
+    System.loadLibrary(this.renderName);
+    if (renderName.equals("vortekrenderer")) {
+      initVulkanWrapper(null, paramOptions.libvulkanPath);
+    }
   }
-  
+
   private native long createVkContext(int paramInt, Options paramOptions);
   
   private native void destroyVkContext(long paramLong);
+
+  private native void initVulkanWrapper(String paramString1, String paramString2);
 
   static int vkMakeVersion(int paramInt1, int paramInt2, int paramInt3) {
     return paramInt1 << 22 | paramInt2 << 12 | paramInt3;
@@ -148,12 +157,16 @@ public class VortekRendererComponent extends EnvironmentComponent implements Con
     public String[] exposedDeviceExtensions = null;
 
     public short imageCacheSize = 256;
+
+    public String libvulkanPath = null;
     
     public short maxDeviceMemory = 4096;
 
     public byte resourceMemoryType = 0;
     
     public int vkMaxVersion = VortekRendererComponent.VK_MAX_VERSION;
+
+    public short renderVersion = 0;
     
     public static Options fromKeyValueSet(KeyValueSet param1KeyValueSet) {
       if (param1KeyValueSet == null || param1KeyValueSet.isEmpty())
@@ -172,6 +185,7 @@ public class VortekRendererComponent extends EnvironmentComponent implements Con
       options.maxDeviceMemory = (short)param1KeyValueSet.getInt("maxDeviceMemory", 512);
       options.imageCacheSize = (short)param1KeyValueSet.getInt("imageCacheSize", 256);
       options.resourceMemoryType = (byte)param1KeyValueSet.getInt("resourceMemoryType", 0);
+      options.renderVersion = (short)param1KeyValueSet.getInt("renderVersion", 0);
       return options;
     }
   }

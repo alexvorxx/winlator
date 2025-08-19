@@ -28,7 +28,7 @@ public class VortekConfigDialog extends ContentDialog {
   }
 
   public static final String DEFAULT_CONFIG = "vkMaxVersion=" + DEFAULT_VK_MAX_VERSION +
-          ",maxDeviceMemory=512,imageCacheSize=256,resourceMemoryType=0";
+          ",maxDeviceMemory=512,imageCacheSize=256,resourceMemoryType=0,renderVersion=0";
 
   private final Context context;
 
@@ -42,6 +42,7 @@ public class VortekConfigDialog extends ContentDialog {
     final Spinner SMaxDeviceMemory = findViewById(R.id.SMaxDeviceMemory);
     final Spinner SImageCacheSize = findViewById(R.id.SImageCacheSize);
     final Spinner SResourceMemoryType = findViewById(R.id.SResourceMemoryType);
+    final Spinner SRenderVersion = findViewById(R.id.SRenderVersion);
     MultiSelectionComboBox multiSelectionComboBox = findViewById(R.id.CBExposedExtensions);
 
     String[] arrayOfString = GPUHelper.vkGetDeviceExtensions();
@@ -60,6 +61,7 @@ public class VortekConfigDialog extends ContentDialog {
     AppUtils.setSpinnerSelectionFromValue(SMaxDeviceMemory, config.get("maxDeviceMemory", String.valueOf(512)));
     AppUtils.setSpinnerSelectionFromValue(SImageCacheSize, config.get("imageCacheSize", String.valueOf(256)));
     SResourceMemoryType.setSelection(config.getInt("resourceMemoryType", 0));
+    SRenderVersion.setSelection(config.getInt("renderVersion", 0));
 
     setOnConfirmCallback(() -> {
       config.put("vkMaxVersion", SVulkanVersion.getSelectedItem().toString());
@@ -67,6 +69,7 @@ public class VortekConfigDialog extends ContentDialog {
       config.put("imageCacheSize", SImageCacheSize.getSelectedItem().toString());
       config.put("resourceMemoryType", SResourceMemoryType.getSelectedItemPosition());
       config.put("exposedDeviceExtensions", String.join("|", multiSelectionComboBox.getSelectedItems()));
+      config.put("renderVersion", SRenderVersion.getSelectedItemPosition());
       anchor.setTag(config.toString());
     });
   }

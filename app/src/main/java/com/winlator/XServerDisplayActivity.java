@@ -82,7 +82,7 @@ import com.winlator.xenvironment.components.NetworkInfoUpdateComponent;
 import com.winlator.xenvironment.components.PulseAudioComponent;
 import com.winlator.xenvironment.components.SysVSharedMemoryComponent;
 import com.winlator.xenvironment.components.VirGLRendererComponent;
-import com.winlator.xenvironment.components.VortekRendererComponent; ///
+import com.winlator.xenvironment.components.VortekRendererComponent;
 import com.winlator.xenvironment.components.XServerComponent;
 import com.winlator.xserver.Pointer;
 import com.winlator.math.XForm;
@@ -125,7 +125,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private String audioDriver = Container.DEFAULT_AUDIO_DRIVER;
     private String dxwrapper = Container.DEFAULT_DXWRAPPER;
     private KeyValueSet dxwrapperConfig;
-    private KeyValueSet graphicsDriverConfig; ///
+    private KeyValueSet graphicsDriverConfig;
     private WineInfo wineInfo;
     private final EnvVars envVars = new EnvVars();
     private boolean firstTimeBoot = false;
@@ -249,7 +249,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             midiSoundFont = container.getMIDISoundFont();
             dxwrapper = container.getDXWrapper();
             String dxwrapperConfig = container.getDXWrapperConfig();
-            graphicsDriverConfig = new KeyValueSet(container.getGraphicsDriverConfig()); ///
+            graphicsDriverConfig = new KeyValueSet(container.getGraphicsDriverConfig());
             screenSize = container.getScreenSize();
             winHandler.setInputType((byte) container.getInputType());
             lc_all = container.getLC_ALL();
@@ -262,7 +262,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 midiSoundFont = shortcut.getExtra("midiSoundFont", container.getMIDISoundFont());
                 dxwrapper = shortcut.getExtra("dxwrapper", container.getDXWrapper());
                 dxwrapperConfig = shortcut.getExtra("dxwrapperConfig", container.getDXWrapperConfig());
-                graphicsDriverConfig = new KeyValueSet(shortcut.getExtra("graphicsDriverConfig", shortcut.container.getGraphicsDriverConfig())); ///
+                graphicsDriverConfig = new KeyValueSet(shortcut.getExtra("graphicsDriverConfig", shortcut.container.getGraphicsDriverConfig()));
                 screenSize = shortcut.getExtra("screenSize", container.getScreenSize());
                 lc_all = shortcut.getExtra("lc_all", container.getLC_ALL());
 
@@ -652,10 +652,12 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 startVirGLTestServer();
             }
         }
-        ///
         else if (graphicsDriver.startsWith("vortek")) {
             VortekRendererComponent.Options options = VortekRendererComponent.Options.fromKeyValueSet(this.graphicsDriverConfig);
-            environment.addComponent(new VortekRendererComponent(xServer, UnixSocketConfig.createSocket(rootPath, UnixSocketConfig.VORTEK_SERVER_PATH), options));
+            String renderName = "vortekrenderer";
+            if (options.renderVersion == 1)
+                renderName = "vortekrenderer-d";
+            environment.addComponent(new VortekRendererComponent(xServer, UnixSocketConfig.createSocket(rootPath, UnixSocketConfig.VORTEK_SERVER_PATH), options, renderName));
         }
 
         RCManager manager = new RCManager(this);
@@ -678,7 +680,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         winHandler.start();
         envVars.clear();
         dxwrapperConfig = null;
-        graphicsDriverConfig = null; ///
+        graphicsDriverConfig = null;
     }
 
     private void setupUI() {
@@ -892,7 +894,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             envVars.put("VIRGL_NO_READBACK", "true");
             envVars.put("VIRGL_SERVER_PATH", rootDir + UnixSocketConfig.VIRGL_SERVER_PATH);
             envVars.put("vblank_mode", "0");
-            VirGLConfigDialog.setEnvVars(this.graphicsDriverConfig, this.envVars); ///
+            VirGLConfigDialog.setEnvVars(this.graphicsDriverConfig, this.envVars);
             if (changed) {
                 ContentProfile profile = contentsManager.getProfileByEntryName(graphicsDriver);
                 if (profile != null)
@@ -905,7 +907,6 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 }
             }
         }
-        ///
         else if (graphicsDriver.startsWith("vortek")) {
             envVars.put("GALLIUM_DRIVER", "zink");
             envVars.put("ZINK_CONTEXT_THREADED", "1");

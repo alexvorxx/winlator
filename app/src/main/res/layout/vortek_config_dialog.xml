@@ -62,5 +62,16 @@
             android:layout_width="match_parent"
             android:id="@+id/CBExposedExtensions"
             android:entries="@array/max_device_memory_entries" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/vortek_render_version" />
+
+        <Spinner
+            style="@style/ComboBox"
+            android:layout_width="match_parent"
+            android:id="@+id/SRenderVersion"
+            android:entries="@array/vortek_render_version_entries" />
     </LinearLayout>
 </ScrollView>

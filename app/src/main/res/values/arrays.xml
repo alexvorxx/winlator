@@ -278,4 +278,8 @@
         <item>reverse portrait</item>
         <item>reverse landscape</item>
     </string-array>
+    <string-array name="vortek_render_version_entries">
+        <item>10.1 (Hotfix)</item>
+        <item>Debug (11.07.25)</item>
+    </string-array>
 </resources>
