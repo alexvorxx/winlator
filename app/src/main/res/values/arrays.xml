@@ -93,6 +93,7 @@
         <item>4.6</item>
     </string-array>
     <string-array name="max_device_memory_entries">
+        <item>0 (No limit)</item>
         <item>512 MB</item>
         <item>1024 MB</item>
         <item>2048 MB</item>
@@ -110,6 +111,10 @@
         <item>Opaque FD</item>
         <item>DMA Buffer</item>
         <item>Native Hardware Buffer</item>
+    </string-array>
+    <string-array name="vortek_render_version_entries">
+        <item>10.1 (Hotfix)</item>
+        <item>Debug (11.07.25)</item>
     </string-array>
     <string-array name="wincomponent_entries">
         <item>Builtin (Wine)</item>
@@ -277,9 +282,5 @@
         <item>landscape</item>
         <item>reverse portrait</item>
         <item>reverse landscape</item>
-    </string-array>
-    <string-array name="vortek_render_version_entries">
-        <item>10.1 (Hotfix)</item>
-        <item>Debug (11.07.25)</item>
     </string-array>
 </resources>
