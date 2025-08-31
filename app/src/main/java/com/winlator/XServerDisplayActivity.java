@@ -528,25 +528,29 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
         String dxwrapper = this.dxwrapper;
         String dxwrapper2 = "";
-        String enableDgVoodoo = "";
+        String enableDgVoodooDDraw = "";
+        String enableDgVoodooD3D89 = "";
         if (dxwrapper.contains("dxvk") || dxwrapper.contains("vkd3d")) {
             dxwrapper = "dxvk-" + dxwrapperConfig.get("dxvk_version");
             dxwrapper2 = "vkd3d-" + dxwrapperConfig.get("vkd3dVersion");
-            enableDgVoodoo = dxwrapperConfig.get("enableDgVoodoo");
+            enableDgVoodooDDraw = dxwrapperConfig.get("enableDgVoodooDDraw");
+            enableDgVoodooD3D89 = dxwrapperConfig.get("enableDgVoodooD3D89");
         } else if (dxwrapper.contains("wined3d")) {
             dxwrapper = "wined3d-" + dxwrapperConfig.get("wined3d_version");
         }
 
         if (!dxwrapper.equals(container.getExtra("dxwrapper")) ||
                 !dxwrapper2.equals(container.getExtra("dxwrapper2")) ||
-                !enableDgVoodoo.equals(container.getExtra("enableDgVoodoo"))) {
+                !enableDgVoodooDDraw.equals(container.getExtra("enableDgVoodooDDraw")) ||
+                !enableDgVoodooD3D89.equals(container.getExtra("enableDgVoodooD3D89")) ) {
             extractDXWrapperFiles(dxwrapper);
             if (!dxwrapper2.isEmpty())
                 extractDXWrapperFiles(dxwrapper2);
 
             container.putExtra("dxwrapper", dxwrapper);
             container.putExtra("dxwrapper2", dxwrapper2);
-            container.putExtra("enableDgVoodoo", enableDgVoodoo);
+            container.putExtra("enableDgVoodooDDraw", enableDgVoodooDDraw);
+            container.putExtra("enableDgVoodooD3D89", enableDgVoodooD3D89);
             containerDataChanged = true;
         }
 
@@ -1060,8 +1064,11 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                         if (compareVersion(StringUtils.parseNumber(dxwrapper), "2.4") < 0)
                             TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "dxwrapper/d8vk-" + DefaultVersion.D8VK + ".tzst", windowsDir, onExtractFileListener);
 
-                        if (dxwrapperConfig.get("enableDgVoodoo").equals("1"))
+                        if (dxwrapperConfig.get("enableDgVoodooDDraw").equals("1"))
                             TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "dxwrapper/dgVoodoo-" + DefaultVersion.DGVOODOO + ".tzst", windowsDir, onExtractFileListener);
+
+                        if (dxwrapperConfig.get("enableDgVoodooD3D89").equals("1"))
+                            TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "dxwrapper/dgVoodoo-" + DefaultVersion.DGVOODOO + "-d3d.tzst", windowsDir, onExtractFileListener);
                     }
                 } else if (dxwrapper.startsWith("vkd3d")) {
                     ContentProfile profile = contentsManager.getProfileByEntryName(dxwrapper);

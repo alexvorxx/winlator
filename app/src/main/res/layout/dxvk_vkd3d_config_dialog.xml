@@ -142,25 +142,68 @@
 
             <LinearLayout style="@style/FieldSet"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:layout_marginTop="8dp"
-                android:orientation="horizontal">
+                android:layout_height="match_parent">
 
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:layout_weight="1"
-                    android:text="@string/enable_dgVoodoo" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="horizontal">
 
-                <ToggleButton
-                    android:id="@+id/enableDgVoodoo"
-                    android:layout_width="64dp"
-                    android:layout_height="32dp"
-                    android:layout_gravity="center"
-                    android:background="@drawable/toggle_button_selector"
-                    android:textOn=""
-                    android:textOff="" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/use_dgVoodoo" />
+
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:layout_weight="1"
+                        android:text="@string/dgVoodoo_ddraw" />
+
+                    <ToggleButton
+                        android:id="@+id/enableDgVoodooDDraw"
+                        android:layout_width="64dp"
+                        android:layout_height="32dp"
+                        android:layout_gravity="center"
+                        android:background="@drawable/toggle_button_selector"
+                        android:textOn=""
+                        android:textOff="" />
+
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:layout_weight="1"
+                        android:text="@string/dgVoodoo_d3d89" />
+
+                    <ToggleButton
+                        android:id="@+id/enableDgVoodooD3D89"
+                        android:layout_width="64dp"
+                        android:layout_height="32dp"
+                        android:layout_gravity="center"
+                        android:background="@drawable/toggle_button_selector"
+                        android:textOn=""
+                        android:textOff="" />
+                </LinearLayout>
+
             </LinearLayout>
 
             <TextView

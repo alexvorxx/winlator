@@ -180,7 +180,7 @@
         <i><b>WineD3D</b></i> представляет собой слой трансляции DirectX 1-11 в OpenGL.<br /><br />
         <i><b>DXVK</b></i> представляет собой слой трансляции Direct3D 8-11 в Vulkan.<br /><br />
         <i><b>VKD3D</b></i> представляет собой слой трансляции Direct3D 12 API в Vulkan.<br /><br />
-        <i><b>dgVoodoo</b></i> представляет собой реализацию старых графических API (DirectX 1-7 и т.п.) для лучшей совместимости с классическими играми.<br /><br />
+        <i><b>dgVoodoo</b></i> представляет собой реализацию графических API (DirectX 1-9 и т.п.) для лучшей совместимости с классическими играми.<br /><br />
         <i><b>CNC DDraw</b></i> представляет собой реализацию DirectDraw для лучшей совместимости с классическими играми.
     ]]></string>
     <string name="graphics_driver_help_content" translatable="false"><![CDATA[
@@ -264,7 +264,9 @@
     <string name="enabled_async">Включить Async</string>
     <string name="enabled_async_cache">Включить Async Cache</string>
     <string name="vkd3d_feature_level">Уровень функций VKD3D</string>
-    <string name="enable_dgVoodoo" translatable="false">Включить dgVoodoo-2.75</string>
+    <string name="use_dgVoodoo">Использовать dgVoodoo-2.75:</string>
+    <string name="dgVoodoo_ddraw">DDraw (DirectX 1-7)</string>
+    <string name="dgVoodoo_d3d89">D3D8,9 (вместо DXVK)</string>
     <string name="vulkan_version" translatable="false">Версия Vulkan</string>
     <string name="opengl_version" translatable="false">Версия OpenGL</string>
     <string name="disableVertexArrayBGRA" translatable="false">Отключить "Vertex array BGRA"</string>

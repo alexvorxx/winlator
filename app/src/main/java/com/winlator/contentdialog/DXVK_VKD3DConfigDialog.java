@@ -28,7 +28,7 @@ public class DXVK_VKD3DConfigDialog extends ContentDialog {
             ",vkd3dVersion=" + DefaultVersion.VKD3D + ",vkd3dLevel=12_1" +
             ",wined3d_version=" + DefaultVersion.WINED3D + ",csmt=3" +
             ",OffScreenRenderingMode=fbo,strict_shader_math=1,VideoMemorySize=2048" +
-            ",renderer=gl,deviceID=266,vendorID=32902,enableDgVoodoo=1";
+            ",renderer=gl,deviceID=266,vendorID=32902,enableDgVoodooDDraw=1,enableDgVoodooD3D89=0";
     public static final int DXVK_TYPE_NONE = 0;
     public static final int DXVK_TYPE_ASYNC = 1;
     public static final int DXVK_TYPE_GPLASYNC = 2;
@@ -38,7 +38,8 @@ public class DXVK_VKD3DConfigDialog extends ContentDialog {
     private final View llAsyncCache;
     private final Context context;
     private List<String> dxvkVersions;
-    private final ToggleButton enableDgVoodoo;
+    private final ToggleButton enableDgVoodooDDraw;
+    private final ToggleButton enableDgVoodooD3D89;
 
     public static final String[] VKD3D_FEATURE_LEVEL = {"12_0", "12_1", "12_2", "11_1", "11_0", "10_1", "10_0", "9_3", "9_2", "9_1"};
 
@@ -57,7 +58,8 @@ public class DXVK_VKD3DConfigDialog extends ContentDialog {
         swAsyncCache = findViewById(R.id.SWAsyncCache);
         llAsync = findViewById(R.id.LLAsync);
         llAsyncCache = findViewById(R.id.LLAsyncCache);
-        enableDgVoodoo = findViewById(R.id.enableDgVoodoo);
+        enableDgVoodooDDraw = findViewById(R.id.enableDgVoodooDDraw);
+        enableDgVoodooD3D89 = findViewById(R.id.enableDgVoodooD3D89);
 
         ContentsManager contentsManager = new ContentsManager(context);
         contentsManager.syncContents();
@@ -76,7 +78,8 @@ public class DXVK_VKD3DConfigDialog extends ContentDialog {
         swAsyncCache.setChecked(config.get("asyncCache").equals("1"));
         AppUtils.setSpinnerSelectionFromIdentifier(sVKD3DVersion, config.get("vkd3dVersion"));
         AppUtils.setSpinnerSelectionFromIdentifier(sFeatureLevel, config.get("vkd3dLevel"));
-        enableDgVoodoo.setChecked(config.get("enableDgVoodoo").equals("1"));
+        enableDgVoodooDDraw.setChecked(config.get("enableDgVoodooDDraw").equals("1"));
+        enableDgVoodooD3D89.setChecked(config.get("enableDgVoodooD3D89").equals("1"));
 
         updateConfigVisibility(getDXVKType(sDXVKVersion.getSelectedItemPosition()));
 
@@ -100,7 +103,8 @@ public class DXVK_VKD3DConfigDialog extends ContentDialog {
             config.put("asyncCache", ((swAsyncCache.isChecked())&&(llAsyncCache.getVisibility()==View.VISIBLE))?"1":"0");
             config.put("vkd3dVersion", sVKD3DVersion.getSelectedItem().toString());
             config.put("vkd3dLevel", sFeatureLevel.getSelectedItem().toString());
-            config.put("enableDgVoodoo", enableDgVoodoo.isChecked() ? "1" : "0");
+            config.put("enableDgVoodooDDraw", enableDgVoodooDDraw.isChecked() ? "1" : "0");
+            config.put("enableDgVoodooD3D89", enableDgVoodooD3D89.isChecked() ? "1" : "0");
             anchor.setTag(config.toString());
         });
     }
