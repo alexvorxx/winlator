@@ -24,6 +24,7 @@ import java.util.ArrayDeque;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class WinHandler {
     private static final short SERVER_PORT = 7947;
@@ -433,5 +434,12 @@ public class WinHandler {
 
     public ExternalController getCurrentController() {
         return currentController;
+    }
+
+    public void execWithDelay(String command, int delaySeconds) {
+        if (command == null || command.trim().isEmpty() || delaySeconds < 0) return;
+
+        // Use a scheduled executor for delay
+        Executors.newSingleThreadScheduledExecutor().schedule(() -> exec(command), delaySeconds, TimeUnit.SECONDS);
     }
 }

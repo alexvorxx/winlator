@@ -520,6 +520,75 @@
                     android:text="@string/system" />
             </FrameLayout>
 
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="8dp">
+
+                <LinearLayout style="@style/FieldSet">
+
+                    <!-- Checkbox for enabling/disabling secondary executable options -->
+                    <CheckBox
+                        android:id="@+id/CBUseSecondaryExec"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/use_secondary_executable" />
+
+                    <!-- Secondary Executable Options -->
+                    <LinearLayout
+                        android:id="@+id/LLSecondaryExecOptions"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/secondary_exe_path_subtext" />
+
+                            <EditText
+                                android:id="@+id/ETSecondaryExec"
+                                android:layout_width="0dp"
+                                android:layout_weight="1"
+                                android:layout_height="wrap_content"
+                                android:hint="@string/enter_secondary_exec_path" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/exec_delay" />
+
+                            <EditText
+                                android:id="@+id/ETExecDelay"
+                                android:layout_width="0dp"
+                                android:layout_weight="1"
+                                android:layout_height="wrap_content"
+                                android:inputType="number"
+                                android:hint="@string/enter_delay_seconds" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <TextView
+                    style="@style/FieldSetLabel"
+                    android:background="#ffffff"
+                    android:text="@string/secondary_exec" />
+
+            </FrameLayout>
+
         </LinearLayout>
     </LinearLayout>
 </ScrollView>

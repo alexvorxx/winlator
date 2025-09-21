@@ -88,6 +88,21 @@ public class ShortcutSettingsDialog extends ContentDialog {
         MidiManager.loadSFSpinner(sMIDISoundFont);
         AppUtils.setSpinnerSelectionFromValue(sMIDISoundFont, shortcut.getExtra("midiSoundFont", shortcut.container.getMIDISoundFont()));
 
+        final CheckBox cbUseSecondaryExec = findViewById(R.id.CBUseSecondaryExec);
+        final LinearLayout llSecondaryExecOptions = findViewById(R.id.LLSecondaryExecOptions);
+        final EditText etSecondaryExec = findViewById(R.id.ETSecondaryExec);
+        final EditText etExecDelay = findViewById(R.id.ETExecDelay);
+
+        boolean useSecondaryExec = !shortcut.getExtra("secondaryExec", "").isEmpty();
+        cbUseSecondaryExec.setChecked(useSecondaryExec);
+        llSecondaryExecOptions.setVisibility(useSecondaryExec ? View.VISIBLE : View.GONE);
+        etSecondaryExec.setText(shortcut.getExtra("secondaryExec"));
+        etExecDelay.setText(shortcut.getExtra("execDelay", "1"));
+
+        cbUseSecondaryExec.setOnCheckedChangeListener((buttonView, isChecked) -> {
+             llSecondaryExecOptions.setVisibility(isChecked ? View.VISIBLE : View.GONE);
+        });
+
         final Runnable showInputWarning = () -> ContentDialog.alert(context, R.string.enable_xinput_and_dinput_same_time, null);
         final CheckBox cbEnableXInput = findViewById(R.id.CBEnableXInput);
         final CheckBox cbEnableDInput = findViewById(R.id.CBEnableDInput);
@@ -206,6 +221,16 @@ public class ShortcutSettingsDialog extends ContentDialog {
                 updateExtra("midiSoundFont", shortcut.container.getMIDISoundFont(), midiSoundFont);
                 updateExtra("lc_all", shortcut.container.getLC_ALL(), lc_all);
                 shortcut.putExtra("forceFullscreen", cbForceFullscreen.isChecked() ? "1" : null);
+
+                if (cbUseSecondaryExec.isChecked()) {
+                    String secondaryExec = etSecondaryExec.getText().toString().trim();
+                    String execDelay = etExecDelay.getText().toString().trim();
+                    shortcut.putExtra("secondaryExec", !secondaryExec.isEmpty() ? secondaryExec : null);
+                    shortcut.putExtra("execDelay", !execDelay.isEmpty() ? execDelay : null);
+                } else {
+                    shortcut.putExtra("secondaryExec", null);
+                    shortcut.putExtra("execDelay", null);
+                }
 
                 shortcut.putExtra("WoW64Mode", cbWoW64Mode.isChecked() ? "1" : "0");
 

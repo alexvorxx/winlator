@@ -509,4 +509,12 @@ E.g. <b>META</b> for <i>META key</i>, \n
     <string name="pref_summary_requiresExactOrCustom" translatable="false">Requires "display resolution mode" to be "exact" or "custom"</string>
     <string name="pref_summary_requiresIntercepting" translatable="false">Requires intercepting system shortcuts with Dex mode or with Accessibility service</string>
     <string name="pref_summary_requiresTrackpadAndNative" translatable="false">Requires "Touchscreen input mode" to be "Trackpad" and "Display resolution mode" to be not "native"</string>
+
+    <string name="secondary_exec" translatable="false">Secondary exec</string>
+    <string name="use_secondary_executable" translatable="false">Use secondary executable</string>
+    <string name="secondary_exe_path_subtext" translatable="false">Path:</string>
+    <string name="secondary_executable" translatable="false">Secondary exe:</string>
+    <string name="enter_secondary_exec_path" translatable="false">Enter path</string>
+    <string name="exec_delay" translatable="false">Exec delay:</string>
+    <string name="enter_delay_seconds" translatable="false">Enter delay in seconds</string>
 </resources>

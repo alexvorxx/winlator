@@ -483,4 +483,12 @@
     <string name="pref_summary_requiresExactOrCustom">Requires "display resolution mode" to be "exact" or "custom"</string>
     <string name="pref_summary_requiresIntercepting">Requires intercepting system shortcuts with Dex mode or with Accessibility service</string>
     <string name="pref_summary_requiresTrackpadAndNative">Requires "Touchscreen input mode" to be "Trackpad" and "Display resolution mode" to be not "native"</string>
+
+    <string name="secondary_exec">Второй исполняемый файл (exe)</string>
+    <string name="use_secondary_executable">Использовать второй exe</string>
+    <string name="secondary_exe_path_subtext">Путь:</string>
+    <string name="secondary_executable">Второй exe:</string>
+    <string name="enter_secondary_exec_path">Введите путь</string>
+    <string name="exec_delay">Задержка выполнения:</string>
+    <string name="enter_delay_seconds">Введите задержку в секундах</string>
 </resources>

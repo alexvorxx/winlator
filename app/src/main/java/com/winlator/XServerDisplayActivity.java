@@ -244,6 +244,22 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 }
             }
 
+            // Retrieve secondary executable and delay
+            String secondaryExec = shortcut != null ? shortcut.getExtra("secondaryExec") : null;
+            int execDelay = shortcut != null ? Integer.parseInt(shortcut.getExtra("execDelay", "1")) : 1;
+
+            // Debug logging for secondaryExec and execDelay
+            Log.d("XServerDisplayActivity", "Secondary Exec: " + secondaryExec);
+            Log.d("XServerDisplayActivity", "Execution Delay: " + execDelay);
+
+            // If a secondary executable is specified, schedule it
+            if (secondaryExec != null && !secondaryExec.isEmpty() && execDelay > 0) {
+                scheduleSecondaryExecution(secondaryExec, execDelay);
+                Log.d("XServerDisplayActivity", "Scheduling secondary execution: " + secondaryExec + " with delay: " + execDelay);
+            } else {
+                Log.d("XServerDisplayActivity", "No valid secondary executable or delay is zero, skipping scheduling.");
+            }
+
             graphicsDriver = container.getGraphicsDriver();
             audioDriver = container.getAudioDriver();
             midiSoundFont = container.getMIDISoundFont();
@@ -1296,6 +1312,15 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         else if (!className.isEmpty()) {
             winHandler.setProcessAffinity(window.getClassName(), processAffinity);
         }
+    }
+
+    private void scheduleSecondaryExecution(String secondaryExec, int delaySeconds) {
+            if (winHandler != null) {
+               winHandler.execWithDelay(secondaryExec, delaySeconds);
+                Log.d("XServerDisplayActivity", "Scheduled secondary execution: " + secondaryExec + " with delay: " + delaySeconds);
+            } else {
+                Log.e("XServerDisplayActivity", "WinHandler is null, cannot schedule secondary execution.");
+            }
     }
 
     private void changeFrameRatingVisibility(Window window, Property property) {
