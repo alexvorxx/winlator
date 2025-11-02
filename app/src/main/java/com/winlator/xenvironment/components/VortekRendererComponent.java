@@ -36,6 +36,8 @@ public class VortekRendererComponent extends EnvironmentComponent implements Con
 
   private final String renderName;
 
+  private final boolean format;
+
   /*static {
     System.loadLibrary("vortekrenderer");
   }*/
@@ -46,6 +48,11 @@ public class VortekRendererComponent extends EnvironmentComponent implements Con
     this.options = paramOptions;
     this.renderName = paramRenderName;
     System.loadLibrary(this.renderName);
+    if (renderName.equals("vortekrenderer-110"))
+      this.format = true;
+    else
+      this.format = false;
+
     if (!(renderName.equals("vortekrenderer-d"))) {
       initVulkanWrapper(null, paramOptions.libvulkanPath);
     }
@@ -71,7 +78,7 @@ public class VortekRendererComponent extends EnvironmentComponent implements Con
         XServerView xServerView = (this.xServer.getRenderer()).xServerView;
         Objects.requireNonNull(texture);
         xServerView.queueEvent(texture::destroy);
-        drawable.setTexture((Texture)new GPUImage(drawable.width, drawable.height, false, false));
+        drawable.setTexture((Texture)new GPUImage(drawable.width, drawable.height, false, this.format));
       } 
       return ((GPUImage)drawable.getTexture()).getHardwareBufferPtr();
     } 
