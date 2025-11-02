@@ -46,7 +46,7 @@ public class VortekRendererComponent extends EnvironmentComponent implements Con
     this.options = paramOptions;
     this.renderName = paramRenderName;
     System.loadLibrary(this.renderName);
-    if (renderName.equals("vortekrenderer")) {
+    if (!(renderName.equals("vortekrenderer-d"))) {
       initVulkanWrapper(null, paramOptions.libvulkanPath);
     }
   }

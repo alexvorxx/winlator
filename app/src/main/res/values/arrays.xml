@@ -18,7 +18,7 @@
     <string-array name="graphics_driver_entries">
         <item>Turnip-24.1.0</item>
         <item>VirGL-23.1.9</item>
-        <item>Vortek-2.0</item>
+        <item>Vortek-2.0/2.1</item>
         <item>LLVMPipe-25.0.0</item>
     </string-array>
     <string-array name="audio_driver_entries">
@@ -116,6 +116,7 @@
     <string-array name="vortek_render_version_entries">
         <item>10.1 (Hotfix)</item>
         <item>Debug (11.07.25)</item>
+        <item>11.0</item>
     </string-array>
     <string-array name="wincomponent_entries">
         <item>Builtin (Wine)</item>

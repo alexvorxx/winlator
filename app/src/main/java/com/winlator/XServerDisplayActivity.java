@@ -677,6 +677,8 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             String renderName = "vortekrenderer";
             if (options.renderVersion == 1)
                 renderName = "vortekrenderer-d";
+            else if (options.renderVersion == 2)
+                renderName = "vortekrenderer-110";
             environment.addComponent(new VortekRendererComponent(xServer, UnixSocketConfig.createSocket(rootPath, UnixSocketConfig.VORTEK_SERVER_PATH), options, renderName));
         }
 
@@ -862,8 +864,12 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         int cacheContainerId = preferences.getInt("cache_container_id", 0);
         String cacheDriverId = container.getExtra("graphicsDriver");
         String cacheOldVirGL = container.getExtra("useOldVirGL", "false");
+        int cacheVortekRenderVersion = Integer.parseInt(container.getExtra("vortek_render_version", "0"));
+
+        VortekRendererComponent.Options vortekOptions = VortekRendererComponent.Options.fromKeyValueSet(this.graphicsDriverConfig);
+
         boolean changed = (!cacheDriverId.equals(graphicsDriver)) || (cacheContainerId != container.id) ||
-                (!cacheOldVirGL.equals(String.valueOf(useOldVirGL)));
+                (!cacheOldVirGL.equals(String.valueOf(useOldVirGL))) || (cacheVortekRenderVersion != vortekOptions.renderVersion);
         File rootDir = imageFs.getRootDir();
 
         if (changed) {
@@ -873,6 +879,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             FileUtils.delete(new File(imageFs.getLib64Dir(), "libGL.so.1"));
             container.putExtra("graphicsDriver", graphicsDriver);
             container.putExtra("useOldVirGL", useOldVirGL);
+            container.putExtra("vortek_render_version", vortekOptions.renderVersion);
             container.saveData();
             preferences.edit().putInt("cache_container_id", container.id).apply();
         }
@@ -939,8 +946,12 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             }
 
             if (changed) {
-                 TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/vortek-" + DefaultVersion.VORTEK + ".tzst", rootDir);
-                 TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/zink-" + DefaultVersion.ZINK + ".tzst", rootDir);
+                if (vortekOptions.renderVersion == 2)
+                    TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/vortek-2.1.tzst", rootDir);
+                else
+                    TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/vortek-" + DefaultVersion.VORTEK + ".tzst", rootDir);
+
+                TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/zink-" + DefaultVersion.ZINK + ".tzst", rootDir);
             }
         }
         else if (graphicsDriver.startsWith("llvmpipe")) {

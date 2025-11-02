@@ -11,7 +11,7 @@ android {
         minSdk 26
         //noinspection ExpiredTargetSdkVersion
         targetSdk 28
-        versionCode 27
+        versionCode 28
         versionName "7.1.5-glibc-mod"
         externalNativeBuild {
             cmake {
