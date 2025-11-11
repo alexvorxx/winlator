@@ -99,7 +99,10 @@ public class ContainerDetailFragment extends Fragment {
     public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         if (requestCode == MainActivity.OPEN_DIRECTORY_REQUEST_CODE && resultCode == Activity.RESULT_OK) {
             if (data != null) {
-                String path = FileUtils.getFilePathFromUri(data.getData());
+                Uri uri = data.getData();
+                android.util.Log.d("TAG", "URI obtained in onActivityResult: " + uri.toString());
+                String path = FileUtils.getFilePathFromUri(getContext(), uri);
+                android.util.Log.d("TAG", "File path in onActivityResult: " + path);
                 if (path != null && openDirectoryCallback != null) openDirectoryCallback.call(path);
             }
             openDirectoryCallback = null;

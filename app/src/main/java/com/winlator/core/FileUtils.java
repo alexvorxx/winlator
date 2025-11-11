@@ -6,9 +6,11 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.os.Environment;
 import android.os.StatFs;
+import android.provider.DocumentsContract;
 import android.provider.OpenableColumns;
 import android.system.ErrnoException;
 import android.system.Os;
+import android.util.Log;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -23,6 +25,8 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -260,17 +264,39 @@ public abstract class FileUtils {
         return tempFile;
     }
 
-    public static String getFilePathFromUri(Uri uri) {
-        String path = null;
-        if (uri.getAuthority().equals("com.android.externalstorage.documents")) {
-            String[] parts = uri.getLastPathSegment().split(":");
-            if (parts[0].equalsIgnoreCase("primary"))
-                path = Environment.getExternalStorageDirectory() + "/" + parts[1];
-            else
-                // FIXME: may won't work on future Android System.
-                path = "/storage/" + parts[0] + '/' + parts[1];
+    public static String getFilePathFromUriUsingSAF(Context context, Uri uri) {
+        String documentId;
+        try {
+            documentId = DocumentsContract.getTreeDocumentId(uri);
+        } catch (IllegalArgumentException e) {
+            Log.e("TAG", "Invalid URI: " + uri.toString(), e);
+            return null;
         }
-        return path;
+
+        Log.d("TAG", "Document ID: " + documentId);
+        String[] split = documentId.split(":");
+        String type = split[0];
+        String path = split.length > 1 ? split[1] : "";
+
+        try {
+            path = URLDecoder.decode(path, "UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            Log.e("TAG", "Error decoding path: " + path, e);
+            return null;
+        }
+
+        if ("primary".equalsIgnoreCase(type)) {
+            return Environment.getExternalStorageDirectory() + "/" + path;
+        } else {
+            return "/mnt/media_rw/" + type + "/" + path;
+        }
+    }
+
+    public static String getFilePathFromUri(Context context, Uri uri) {
+        Log.d("TAG", "getFilePathFromUri called with URI: " + uri.toString());
+        String filePath = getFilePathFromUriUsingSAF(context, uri);
+        Log.d("TAG", "File path obtained: " + filePath);
+        return filePath;
     }
 
     public static boolean contentEquals(File origin, File target) {
