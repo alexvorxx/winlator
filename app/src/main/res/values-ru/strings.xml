@@ -491,4 +491,6 @@
     <string name="enter_secondary_exec_path">Введите путь</string>
     <string name="exec_delay">Задержка выполнения:</string>
     <string name="enter_delay_seconds">Введите задержку в секундах</string>
+
+    <string name="pip_mode" translatable="false">Режим PiP</string>
 </resources>

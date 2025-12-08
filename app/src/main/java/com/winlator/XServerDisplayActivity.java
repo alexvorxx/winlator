@@ -423,9 +423,11 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     @Override
     public void onPause() {
         super.onPause();
-        if (environment != null) {
-            environment.onPause();
-            xServerView.onPause();
+        if (!isInPictureInPictureMode()) {
+            if (environment != null) {
+                environment.onPause();
+                xServerView.onPause();
+            }
         }
     }
 
@@ -500,6 +502,10 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                     });
                     container.addView(magnifierView);
                 }
+                drawerLayout.closeDrawers();
+                break;
+            case R.id.main_menu_pip_mode:
+                enterPictureInPictureMode();
                 drawerLayout.closeDrawers();
                 break;
             case R.id.main_menu_logs:

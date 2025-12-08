@@ -517,4 +517,6 @@ E.g. <b>META</b> for <i>META key</i>, \n
     <string name="enter_secondary_exec_path" translatable="false">Enter path</string>
     <string name="exec_delay" translatable="false">Exec delay:</string>
     <string name="enter_delay_seconds" translatable="false">Enter delay in seconds</string>
+
+    <string name="pip_mode" translatable="false">PiP Mode</string>
 </resources>
