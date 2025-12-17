@@ -2,11 +2,16 @@ package com.winlator;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
+import android.provider.Settings;
 import android.text.Html;
 import android.text.method.LinkMovementMethod;
 import android.view.MenuItem;
@@ -16,6 +21,7 @@ import android.widget.TextView;
 import androidx.annotation.IntRange;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -60,6 +66,10 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
 
         Intent intent = getIntent();
         editInputControls = intent.getBooleanExtra("edit_input_controls", false);
+
+        SharedPreferences sp = getSharedPreferences("all_files_access_request", MODE_PRIVATE);
+        boolean allFilesAccessRequested = sp.getBoolean("all_files_access_requested", false);
+
         if (editInputControls) {
             selectedProfileId = intent.getIntExtra("selected_profile_id", 0);
             actionBar.setHomeAsUpIndicator(R.drawable.icon_action_bar_back);
@@ -74,7 +84,26 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
             onNavigationItemSelected(navigationView.getMenu().findItem(menuItemId));
             navigationView.setCheckedItem(menuItemId);
             if (!requestAppPermissions()) ImageFsInstaller.installIfNeeded(this);
+
+            //if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !Environment.isExternalStorageManager()) {
+            if (!allFilesAccessRequested) {
+                showAllFilesAccessDialog();
+                sp.edit().putBoolean("all_files_access_requested", true).apply();
+            }
         }
+    }
+
+    private void showAllFilesAccessDialog() {
+        new AlertDialog.Builder(this)
+                .setTitle(getString(R.string.all_files_access_required))
+                .setMessage(getString(R.string.external_storage_access_info))
+                .setPositiveButton(getString(R.string.ok), (dialog, which) -> {
+                    Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                    intent.setData(Uri.parse("package:" + getPackageName()));
+                    startActivity(intent);
+                })
+                .setNegativeButton(getString(R.string.cancel), null)
+                .show();
     }
 
     @Override
@@ -123,6 +152,9 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
     private boolean requestAppPermissions() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) return false;
+
+        boolean hasManageStoragePermission = Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager();
+        if (hasManageStoragePermission) return false;
 
         String[] permissions = new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE};
         ActivityCompat.requestPermissions(this, permissions, PERMISSION_WRITE_EXTERNAL_STORAGE_REQUEST_CODE);

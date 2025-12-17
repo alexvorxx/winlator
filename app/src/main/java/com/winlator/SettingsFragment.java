@@ -1,11 +1,13 @@
 package com.winlator;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -249,6 +251,12 @@ public class SettingsFragment extends Fragment {
 
         view.findViewById(R.id.BTReInstallImagefs).setOnClickListener(v -> {
             ContentDialog.confirm(context, R.string.do_you_want_to_reinstall_imagefs, () -> ImageFsInstaller.installFromAssets((MainActivity) getActivity()));
+        });
+
+        view.findViewById(R.id.BTRequestExternalStorageAccess).setOnClickListener(v -> {
+            Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+            intent.setData(Uri.parse("package:" + context.getPackageName()));
+            startActivity(intent);
         });
 
         view.findViewById(R.id.BTConfirm).setOnClickListener((v) -> {

@@ -519,4 +519,8 @@ E.g. <b>META</b> for <i>META key</i>, \n
     <string name="enter_delay_seconds" translatable="false">Enter delay in seconds</string>
 
     <string name="pip_mode" translatable="false">PiP Mode</string>
+    <string name="external_storage_access_info" translatable="false">In order to grant access to additional storage devices such as USB storage device, the All Files Access permission must be granted. Press OK to grant All Files Access in your Android Settings.</string>
+    <string name="all_files_access_required" translatable="false">All Files Access Required</string>
+    <string name="external_storage_access" translatable="false">External storage access</string>
+    <string name="request_access" translatable="false">Request access</string>
 </resources>

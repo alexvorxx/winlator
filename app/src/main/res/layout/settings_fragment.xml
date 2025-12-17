@@ -450,6 +450,26 @@
                     style="@style/FieldSetLabel"
                     android:text="@string/imagefs" />
             </FrameLayout>
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <LinearLayout style="@style/FieldSet">
+
+                    <Button
+                        style="@style/ButtonPositive"
+                        android:id="@+id/BTRequestExternalStorageAccess"
+                        android:layout_width="240dp"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center_horizontal"
+                        android:text="@string/request_access" />
+                </LinearLayout>
+
+                <TextView
+                    style="@style/FieldSetLabel"
+                    android:text="@string/external_storage_access" />
+            </FrameLayout>
         </LinearLayout>
     </ScrollView>
 

@@ -493,4 +493,8 @@
     <string name="enter_delay_seconds">Введите задержку в секундах</string>
 
     <string name="pip_mode" translatable="false">Режим PiP</string>
+    <string name="external_storage_access_info" translatable="false">Для предоставления доступа к дополнительным устройствам хранения данных, таким как USB-накопители, необходимо предоставить разрешение «Доступ ко всем файлам». Нажмите «ОК», чтобы предоставить разрешение «Доступ ко всем файлам» в настройках Android.</string>
+    <string name="all_files_access_required" translatable="false">Требуется доступ ко всем файлам.</string>
+    <string name="external_storage_access" translatable="false">Доступ к внешним накопителям</string>
+    <string name="request_access" translatable="false">Запросить доступ</string>
 </resources>
