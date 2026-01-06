@@ -115,18 +115,5 @@
             android:name="android.allow_multiple_resumed_activities"
             android:value="true" />
 
-        <!-- Accessibility service for KeyInterceptor -->
-        <service
-            android:name=".x11utils.KeyInterceptor"
-            android:label="Winlator:X11 KeyInterceptor"
-            android:exported="true"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/accessibility_service_config" />
-        </service>
     </application>
 </manifest>

@@ -7,7 +7,6 @@ package com.winlator.input;
 import android.content.Context;
 import android.graphics.PointF;
 import android.os.SystemClock;
-import android.util.Log;
 import android.view.MotionEvent;
 import android.view.ViewConfiguration;
 
@@ -30,7 +29,7 @@ public interface InputStrategyInterface {
      * @param button The button value for the tap event.
      * @return A boolean representing whether the event was handled.
      */
-    boolean onPressAndHold(int button);
+    boolean onPressAndHold(int button, boolean force);
 
     /**
      * Called when a MotionEvent is received.  This method allows the input strategy to store or
@@ -50,7 +49,7 @@ public interface InputStrategyInterface {
 
     class NullInputStrategy implements InputStrategyInterface {
         @Override public void onTap(int button) {}
-        @Override public boolean onPressAndHold(int button) { return false; }
+        @Override public boolean onPressAndHold(int button, boolean force) { return false; }
         @Override public void onScroll(float distanceX, float distanceY) {}
         @Override public void onMotionEvent(MotionEvent event) {}
     }
@@ -70,18 +69,12 @@ public interface InputStrategyInterface {
         /**
          * Stores the time of the most recent left button single tap processed.
          */
-        private long mLastLeftTapTimeInMs;
+        private long mLastTapTimeInMs;
 
         /**
-         * Stores the position of the last button single tap 
+         * Stores the position of the last left button single tap processed.
          */
         private PointF mLastTapPoint;
-        
-        /**
-         * Stores the position of the last left button single tap used to
-           process a double tap
-         */
-        private PointF mLastLeftTapPoint;
 
         /**
          * The maximum distance, in pixels, between two points in order for them to be considered a
@@ -97,9 +90,6 @@ public interface InputStrategyInterface {
 
         /** Mouse-button currently held down, or BUTTON_UNDEFINED otherwise. */
         private int mHeldButton = InputStub.BUTTON_UNDEFINED;
-        
-        /** Mouse-button tapped and that needs to be processed */
-        private int mTappedButton = InputStub.BUTTON_UNDEFINED;
 
         public SimulatedTouchInputStrategy(
                 RenderData renderData, InputEventSender injector, Context context) {
@@ -136,38 +126,33 @@ public interface InputStrategyInterface {
         @Override
         public void onTap(int button) {
             PointF currentTapPoint = mRenderData.getCursorPosition();
-            mTappedButton = button;
-            // Left clicks are handled a little differently than the events for other buttons.
-            // This is needed because translating touch events to mouse events has a problem with
-            // location consistency for double clicks.  If you take the center location of each tap
-            // and inject them as mouse clicks, the distance between those two points will often
-            // cause the remote OS to recognize the gesture as two distinct clicks instead of a
-            // double click.  In order to increase the success rate of double taps/clicks, we
-            // squirrel away the time and coordinates of each single tap and if we detect the user
-            // attempting a double tap, we let TouchInputHandler handle the double tap;
-            long tapInterval = SystemClock.uptimeMillis() - mLastLeftTapTimeInMs;
-            if (mTappedButton == InputStub.BUTTON_LEFT) {
-                if (isDoubleTap(currentTapPoint.x, currentTapPoint.y, tapInterval))
-                {
-                    mLastLeftTapPoint = null;
-                    mLastLeftTapTimeInMs = 0;
+            if (button == InputStub.BUTTON_LEFT) {
+                // Left clicks are handled a little differently than the events for other buttons.
+                // This is needed because translating touch events to mouse events has a problem with
+                // location consistency for double clicks.  If you take the center location of each tap
+                // and inject them as mouse clicks, the distance between those two points will often
+                // cause the remote OS to recognize the gesture as two distinct clicks instead of a
+                // double click.  In order to increase the success rate of double taps/clicks, we
+                // squirrel away the time and coordinates of each single tap and if we detect the user
+                // attempting a double tap, we use the original event's location for that second tap.
+                long tapInterval = SystemClock.uptimeMillis() - mLastTapTimeInMs;
+                if (isDoubleTap(currentTapPoint.x, currentTapPoint.y, tapInterval)) {
+                    mLastTapPoint = null;
+                    mLastTapTimeInMs = 0;
+                } else {
+                    mLastTapPoint = currentTapPoint;
+                    mLastTapTimeInMs = SystemClock.uptimeMillis();
                 }
-                else {
-                    mLastLeftTapPoint = currentTapPoint;
-                    mLastLeftTapTimeInMs = SystemClock.uptimeMillis();
-                    mInjector.sendMouseClick(mTappedButton, false);
-                    mTappedButton = InputStub.BUTTON_UNDEFINED; 
-                }     
+            } else {
+                mLastTapPoint = null;
+                mLastTapTimeInMs = 0;
             }
-            else {
-                mLastLeftTapPoint = null;
-                mLastLeftTapTimeInMs = 0;
-            }
-            mLastTapPoint = currentTapPoint;
+
+            mInjector.sendMouseClick(button, false);
         }
 
         @Override
-        public boolean onPressAndHold(int button) {
+        public boolean onPressAndHold(int button, boolean force) {
             mInjector.sendMouseDown(button, false);
             mHeldButton = button;
             return true;
@@ -180,21 +165,14 @@ public interface InputStrategyInterface {
 
         @Override
         public void onMotionEvent(MotionEvent event) {
-            if (event.getActionMasked() == MotionEvent.ACTION_UP) {
-                if ((mTappedButton != InputStub.BUTTON_UNDEFINED) && (mLastTapPoint.equals(mRenderData.getCursorPosition()))) {
-                        mInjector.sendMouseEvent(mLastTapPoint, mTappedButton, true, false);
-                        mInjector.sendMouseEvent(mLastTapPoint, mTappedButton, false, false);
-                }
-                if (mHeldButton != InputStub.BUTTON_UNDEFINED)
-                    mInjector.sendMouseUp(mHeldButton, false);
+            if (event.getActionMasked() == MotionEvent.ACTION_UP && mHeldButton != InputStub.BUTTON_UNDEFINED) {
+                mInjector.sendMouseUp(mHeldButton, false);
                 mHeldButton = InputStub.BUTTON_UNDEFINED;
-                mTappedButton = InputStub.BUTTON_UNDEFINED;
-                mLastTapPoint = null;
             }
         }
 
         private boolean isDoubleTap(float currentX, float currentY, long tapInterval) {
-            if (tapInterval > mDoubleTapDurationInMs || mLastLeftTapPoint == null) {
+            if (tapInterval > mDoubleTapDurationInMs || mLastTapPoint == null) {
                 return false;
             }
 
@@ -202,7 +180,7 @@ public interface InputStrategyInterface {
             // consistent double tap behavior regardless of zoom level.
             //
             float[] currentValues = {currentX * mRenderData.scale.x, currentY * mRenderData.scale.y};
-            float[] previousValues = {mLastLeftTapPoint.x * mRenderData.scale.x, mLastLeftTapPoint.y * mRenderData.scale.y};
+            float[] previousValues = {mLastTapPoint.x * mRenderData.scale.x, mLastTapPoint.y * mRenderData.scale.y};
 
             int deltaX = (int) (currentValues[0] - previousValues[0]);
             int deltaY = (int) (currentValues[1] - previousValues[1]);
@@ -232,7 +210,10 @@ public interface InputStrategyInterface {
         }
 
         @Override
-        public boolean onPressAndHold(int button) {
+        public boolean onPressAndHold(int button, boolean force) {
+            if (mInjector.tapToMove && !force)
+                return false;
+
             mInjector.sendMouseDown(button, true);
             mHeldButton = button;
             return true;

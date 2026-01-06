@@ -7,13 +7,13 @@ package com.winlator.input;
 import static android.view.KeyEvent.*;
 import static android.view.MotionEvent.*;
 import static androidx.core.math.MathUtils.clamp;
+import static com.winlator.X11Activity.externalKeyboardConnected;
 import static com.winlator.input.InputStub.*;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 import android.graphics.PointF;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
-import android.view.View;
 
 import java.util.List;
 import java.util.TreeSet;
@@ -30,17 +30,18 @@ public final class InputEventSender {
     private final InputStub mInjector;
 
     public boolean tapToMove = false;
-    public boolean preferScancodes = false;
-    public boolean pointerCapture = false;
+    public boolean scaleTouchpad = false;
 
     /** Set of pressed keys for which we've sent TextEvent. */
     private final TreeSet<Integer> mPressedTextKeys;
+    private final TreeSet<Integer> mPressedKeys;
 
     public InputEventSender(InputStub injector) {
         if (injector == null)
             throw new NullPointerException();
         mInjector = injector;
         mPressedTextKeys = new TreeSet<>();
+        mPressedKeys = new TreeSet<>();
     }
 
     private static final List<Integer> buttons = List.of(BUTTON_UNDEFINED, BUTTON_LEFT, BUTTON_MIDDLE, BUTTON_RIGHT);
@@ -65,8 +66,13 @@ public final class InputEventSender {
     public void sendMouseClick(int button, boolean relative) {
         if (!buttons.contains(button))
             return;
-        mInjector.sendMouseEvent(0, 0, button, true, relative);
-        mInjector.sendMouseEvent(0, 0, button, false, relative);
+
+        try {
+            mInjector.sendMouseEvent(0, 0, button, true, relative);
+            Thread.sleep(20);
+            mInjector.sendMouseEvent(0, 0, button, false, relative);
+        } catch (InterruptedException ignored) {
+        }
     }
 
     public void sendCursorMove(float x, float y, boolean relative) {
@@ -130,9 +136,14 @@ public final class InputEventSender {
      * key-events or text-events. This contains some logic for handling some special keys, and
      * avoids sending a key-up event for a key that was previously injected as a text-event.
      */
-    public boolean sendKeyEvent(View v, KeyEvent e) {
+    public boolean sendKeyEvent(KeyEvent e) {
         int keyCode = e.getKeyCode();
         boolean pressed = e.getAction() == KeyEvent.ACTION_DOWN;
+
+        if ((e.getFlags() & KeyEvent.FLAG_CANCELED) == KeyEvent.FLAG_CANCELED) {
+            android.util.Log.d("KeyEvent", "We've got key event with FLAG_CANCELED, it will not be consumed. Details: " + e);
+            return true;
+        }
 
         // Events received from software keyboards generate TextEvent in two
         // cases:
@@ -154,9 +165,10 @@ public final class InputEventSender {
         // For Enter getUnicodeChar() returns 10 (line feed), but we still
         // want to send it as KeyEvent.
         char unicode = keyCode != KEYCODE_ENTER ? (char) e.getUnicodeChar() : 0;
-        int scancode = (preferScancodes || !no_modifiers) ? e.getScanCode(): 0;
 
-        if (!preferScancodes) {
+        int scancode = (externalKeyboardConnected || !no_modifiers) ? e.getScanCode(): 0;
+
+        if (!externalKeyboardConnected) {
             if (pressed && unicode != 0 && no_modifiers) {
                 mPressedTextKeys.add(keyCode);
                 if ((e.getMetaState() & META_ALT_RIGHT_ON) != 0)
@@ -199,11 +211,18 @@ public final class InputEventSender {
         }
 
         // Ignoring Android's autorepeat.
-        if (e.getRepeatCount() > 0)
+        // But some weird IMEs (or firmwares) send first event with repeatCount=1 (not 0)
+        // Probably related to preceding event with FLAG_CANCELLED flag
+        if (e.getRepeatCount() > 0 && mPressedKeys.contains(keyCode))
             return true;
 
-        if (pointerCapture && keyCode == KEYCODE_ESCAPE && !pressed)
-            v.releasePointerCapture();
+        if (pressed)
+            mPressedKeys.add(keyCode);
+        else
+            mPressedKeys.remove(keyCode);
+
+        //if (keyCode == KEYCODE_ESCAPE && !pressed && e.hasNoModifiers())
+            //setCapturingEnabled(false);
 
         // We try to send all other key codes to the host directly.
         return mInjector.sendKeyEvent(scancode, keyCode, pressed);

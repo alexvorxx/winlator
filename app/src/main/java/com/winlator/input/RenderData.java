@@ -4,7 +4,6 @@
 
 package com.winlator.input;
 
-import android.graphics.Matrix;
 import android.graphics.PointF;
 
 /**

@@ -47,8 +47,6 @@ import androidx.annotation.RequiresApi;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 
-import com.winlator.X11Activity;
-
 public class ContainersFragment extends Fragment {
     private RecyclerView recyclerView;
     private TextView emptyTextView;
