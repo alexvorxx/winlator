@@ -5,11 +5,16 @@ import static androidx.core.content.ContextCompat.getSystemService;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.content.pm.ShortcutInfo;
 import android.content.pm.ShortcutManager;
 import android.graphics.drawable.Icon;
 import android.os.Build;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -32,6 +37,9 @@ import com.winlator.container.Shortcut;
 import com.winlator.contentdialog.ContentDialog;
 import com.winlator.contentdialog.ShortcutSettingsDialog;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -155,13 +163,21 @@ public class ShortcutsFragment extends Fragment {
         private void runFromShortcut(Shortcut shortcut) {
             Activity activity = getActivity();
 
-            if (!XrActivity.isEnabled(getContext())) {
-                Intent intent = new Intent(activity, XServerDisplayActivity.class);
-                intent.putExtra("container_id", shortcut.container.id);
-                intent.putExtra("shortcut_path", shortcut.file.getPath());
-                activity.startActivity(intent);
+            final Context context = getContext();
+            SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
+            boolean isX11LorieEnabled = sp.getBoolean("use_lorie", false);
+            if(isX11LorieEnabled) {
+                launchXLorie(shortcut.container.id, shortcut.file.getPath());
             }
-            else XrActivity.openIntent(activity, shortcut.container.id, shortcut.file.getPath());
+            else {
+                if (!XrActivity.isEnabled(getContext())) {
+                    Intent intent = new Intent(activity, XServerDisplayActivity.class);
+                    intent.putExtra("container_id", shortcut.container.id);
+                    intent.putExtra("shortcut_path", shortcut.file.getPath());
+                    activity.startActivity(intent);
+                } else
+                    XrActivity.openIntent(activity, shortcut.container.id, shortcut.file.getPath());
+            }
         }
     }
 
@@ -205,5 +221,46 @@ public class ShortcutsFragment extends Fragment {
                 }
             }
         } catch (Exception e) {}
+    }
+
+    //@RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
+    private void launchXLorie(int container_id, String shortcut_path) {
+        PackageManager pm = getActivity().getPackageManager();
+        PackageInfo info;
+        try {
+            ///info = pm.getPackageInfo(getActivity().getPackageName(), PackageManager.PackageInfoFlags.of(0));
+            info = pm.getPackageInfo(getActivity().getPackageName(), PackageManager.GET_META_DATA);
+        }
+        catch (PackageManager.NameNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+        ProcessBuilder builder = new ProcessBuilder("/system/bin/app_process", "/", "com.winlator.CmdEntryPoint", ":0", "-legacy-drawing");
+        builder.redirectErrorStream(true);
+        builder.environment().put("CLASSPATH", info.applicationInfo.sourceDir);
+        builder.environment().put("WINLATOR_X11_DEBUG", "1");
+        Log.i("SourceDir: ", info.applicationInfo.sourceDir);
+        builder.environment().put("TMPDIR", "/data/data/com.winlator/files/imagefs/usr/tmp");
+        builder.environment().put("XKB_CONFIG_ROOT", "/data/data/com.winlator/files/imagefs/usr/share/X11/xkb");
+        Thread t = new Thread(new Runnable(){
+            @Override
+            public void run() {
+                try {
+                    Process x11Process = builder.start();
+                    Intent x11Lorie = new Intent(getActivity(), X11Activity.class);
+                    x11Lorie.putExtra("container_id", container_id);
+                    x11Lorie.putExtra("shortcut_path", shortcut_path);
+                    startActivity(x11Lorie);
+                    BufferedReader br = new BufferedReader(new InputStreamReader(x11Process.getInputStream()));
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        Log.d("X11Loader", line);
+                    }
+                }
+                catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        });
+        t.start();
     }
 }

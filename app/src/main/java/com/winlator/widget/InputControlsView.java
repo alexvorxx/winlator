@@ -16,6 +16,7 @@ import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+import android.util.Log;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.PointerIcon;
@@ -41,6 +42,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Timer;
 import java.util.TimerTask;
+
+import static com.winlator.X11Activity.handleInputEventX11;
+import static com.winlator.X11Activity.handleInputMouseEventX11;
+import static com.winlator.X11Activity.handleTouchEventX11;
 
 public class InputControlsView extends View {
     public static final float DEFAULT_OVERLAY_OPACITY = 0.4f;
@@ -400,7 +405,10 @@ public class InputControlsView extends View {
                             touchpadView.setPointerButtonLeftEnabled(false);
                         }
                     }
-                    if (!handled) touchpadView.onTouchEvent(event);
+                    if (!handled) {
+                        if (handleTouchEventX11(this, event)) break;
+                        touchpadView.onTouchEvent(event);
+                    }
                     break;
                 }
                 case MotionEvent.ACTION_MOVE: {
@@ -412,7 +420,10 @@ public class InputControlsView extends View {
                         for (ControlElement element : profile.getElements()) {
                             if (element.handleTouchMove(i, x, y)) handled = true;
                         }
-                        if (!handled) touchpadView.onTouchEvent(event);
+                        if (!handled) {
+                            if (handleTouchEventX11(this, event)) break;
+                            touchpadView.onTouchEvent(event);
+                        }
                     }
                     break;
                 }
@@ -420,7 +431,10 @@ public class InputControlsView extends View {
                 case MotionEvent.ACTION_POINTER_UP:
                 case MotionEvent.ACTION_CANCEL:
                     for (ControlElement element : profile.getElements()) if (element.handleTouchUp(pointerId)) handled = true;
-                    if (!handled) touchpadView.onTouchEvent(event);
+                    if (!handled) {
+                        if (handleTouchEventX11(this, event)) break;
+                        touchpadView.onTouchEvent(event);
+                    }
                     break;
             }
         }
@@ -453,6 +467,8 @@ public class InputControlsView extends View {
     }
 
     public void handleInputEvent(Binding binding, boolean isActionDown, float offset) {
+        handleInputEventX11(binding, isActionDown);
+
         if (binding.isGamepad()) {
             WinHandler winHandler = xServer != null ? xServer.getWinHandler() : null;
             GamepadState state = profile.getGamepadState();
@@ -500,6 +516,7 @@ public class InputControlsView extends View {
             }
             else {
                 Pointer.Button pointerButton = binding.getPointerButton();
+                if (handleInputMouseEventX11(binding, isActionDown)) return;
                 if (isActionDown) {
                     if (pointerButton != null) {
                         xServer.injectPointerButtonPress(pointerButton);

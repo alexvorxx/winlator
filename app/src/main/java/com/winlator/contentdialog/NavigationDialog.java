@@ -16,9 +16,62 @@ import androidx.annotation.NonNull;
 
 import com.google.android.material.navigation.NavigationView;
 import com.winlator.R;
+import com.winlator.X11Activity;
 import com.winlator.XServerDisplayActivity;
 
 public class NavigationDialog extends ContentDialog {
+
+    public NavigationDialog(@NonNull X11Activity context) {
+        super(context, R.layout.navigation_dialog);
+        setIcon(R.drawable.icon_container);
+        setTitle(context.getString(R.string.app_name));
+        findViewById(R.id.BTCancel).setVisibility(View.GONE);
+
+        GridLayout grid = findViewById(R.id.main_menu_grid);
+        int orientation = context.getResources().getConfiguration().orientation;
+        if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            grid.setColumnCount(5);
+        } else {
+            grid.setColumnCount(2);
+        }
+
+        NavigationView navigation = context.findViewById(R.id.NavigationViewX11);
+        Menu menu = navigation.getMenu();
+        for (int i = 0; i < menu.size(); i++) {
+            MenuItem item = menu.getItem(i);
+            if (!item.isVisible()) {
+                continue;
+            }
+
+            int padding = dpToPx(5, context);
+            LinearLayout layout = new LinearLayout(context);
+            layout.setPadding(padding, padding, padding, padding);
+            layout.setOrientation(LinearLayout.VERTICAL);
+            layout.setOnClickListener(view -> {
+                context.onNavigationItemSelected(item);
+                dismiss();
+            });
+
+            int size = dpToPx(40, context);
+            View icon = new View(context);
+            item.getIcon().setTint(context.getColor(R.color.colorAccent));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(size, size);
+            lp.gravity = Gravity.CENTER_HORIZONTAL;
+            icon.setLayoutParams(lp);
+            icon.setBackground(item.getIcon());
+            layout.addView(icon);
+
+            int width = dpToPx(96, context);
+            TextView text = new TextView(context);
+            text.setLayoutParams(new ViewGroup.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT));
+            text.setText(item.getTitle());
+            text.setGravity(Gravity.CENTER);
+            text.setLines(2);
+            layout.addView(text);
+
+            grid.addView(layout);
+        }
+    }
 
     public NavigationDialog(@NonNull XServerDisplayActivity context) {
         super(context, R.layout.navigation_dialog);

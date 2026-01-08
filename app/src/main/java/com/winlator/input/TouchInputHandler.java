@@ -519,6 +519,14 @@ public class TouchInputHandler {
         return mInjector.sendKeyEvent(e);
     }
 
+    public void sendMouseEvent(int button, boolean down, boolean relative) {
+        mInjector.sendMouseEvent(null, button, down, relative);
+    }
+
+    public void sendMouseWheelEvent(float distance) {
+        mInjector.sendMouseWheelEvent(distance, distance);
+    }
+
     private class HardwareMouseListener {
         private int savedBS = 0;
         private int currentBS = 0;

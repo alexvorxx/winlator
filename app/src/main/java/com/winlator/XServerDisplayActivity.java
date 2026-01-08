@@ -1,6 +1,7 @@
 package com.winlator;
 
 import android.annotation.SuppressLint;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
@@ -378,11 +379,6 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             configChangedCallback = runnable;
         } else
             runnable.run();
-
-        SharedPreferences sp = android.preference.PreferenceManager.getDefaultSharedPreferences(this);
-        boolean isX11LorieEnabled = sp.getBoolean("use_lorie", false);
-        if(isX11LorieEnabled)
-            launchXLorie();
     }
 
     @Override
@@ -675,7 +671,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             if (!useOldVirGL)
                 environment.addComponent(new VirGLRendererComponent(xServer, UnixSocketConfig.createSocket(rootPath, UnixSocketConfig.VIRGL_SERVER_PATH)));
             else {
-                startVirGLTestServer();
+                startVirGLTestServer(this);
             }
         }
         else if (graphicsDriver.startsWith("vortek")) {
@@ -767,7 +763,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         AppUtils.observeSoftKeyboardVisibility(drawerLayout, renderer::setScreenOffsetYRelativeToCursor);
     }
 
-    private ActivityResultLauncher<Intent> controlsEitorActivityResultLauncher = registerForActivityResult(
+    private ActivityResultLauncher<Intent> controlsEditorActivityResultLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(),
             result -> {
                 if (editInputControlsCallback != null) {
@@ -827,7 +823,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 loadProfileSpinner.run();
                 updateProfile.run();
             };
-            controlsEitorActivityResultLauncher.launch(intent);
+            controlsEditorActivityResultLauncher.launch(intent);
         });
 
         dialog.setOnConfirmCallback(() -> {
@@ -1123,7 +1119,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         }
     }
 
-    private static int compareVersion(String varA, String varB) {
+    public static int compareVersion(String varA, String varB) {
         final String[] levelsA = varA.split("\\.");
         final String[] levelsB = varB.split("\\.");
         int minLen = Math.min(levelsA.length, levelsB.length);
@@ -1353,45 +1349,6 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         }
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.TIRAMISU)
-    private void launchXLorie() {
-        PackageManager pm = getPackageManager();
-        PackageInfo info;
-        try {
-            ///info = pm.getPackageInfo(getActivity().getPackageName(), PackageManager.PackageInfoFlags.of(0));
-            info = pm.getPackageInfo(getPackageName(), PackageManager.GET_META_DATA);
-        }
-        catch (PackageManager.NameNotFoundException e) {
-            throw new RuntimeException(e);
-        }
-        ProcessBuilder builder = new ProcessBuilder("/system/bin/app_process", "/", "com.winlator.CmdEntryPoint", ":0", "-legacy-drawing");
-        builder.redirectErrorStream(true);
-        builder.environment().put("CLASSPATH", info.applicationInfo.sourceDir);
-        builder.environment().put("WINLATOR_X11_DEBUG", "1");
-        Log.i("SourceDir: ", info.applicationInfo.sourceDir);
-        builder.environment().put("TMPDIR", "/data/data/com.winlator/files/imagefs/usr/tmp");
-        builder.environment().put("XKB_CONFIG_ROOT", "/data/data/com.winlator/files/imagefs/usr/share/X11/xkb");
-        Thread t = new Thread(new Runnable(){
-            @Override
-            public void run() {
-                try {
-                    Process x11Process = builder.start();
-                    Intent x11Lorie = new Intent(getBaseContext(), X11Activity.class);
-                    startActivity(x11Lorie);
-                    BufferedReader br = new BufferedReader(new InputStreamReader(x11Process.getInputStream()));
-                    String line;
-                    while ((line = br.readLine()) != null) {
-                        Log.d("X11Loader", line);
-                    }
-                }
-                catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-            }
-        });
-        t.start();
-    }
-
     private void handleCapturedPointer(MotionEvent event) {
 
         boolean handled = false;
@@ -1443,7 +1400,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         }
     }
 
-    private void startVirGLTestServer() {
+    public static void startVirGLTestServer(Context context) {
         Thread t = new Thread(new Runnable(){
             @Override
             public void run() {
@@ -1453,7 +1410,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                     // creating exec process
                     Log.v("THREAD", "virgl_test_server starting...");
                     Process process =
-                            Runtime.getRuntime().exec(getApplicationInfo().nativeLibraryDir +
+                            Runtime.getRuntime().exec(context.getApplicationInfo().nativeLibraryDir +
                                     "/libvirgl_test_server.so");
                     // reading and printing executable outcome
                     byte[] buffer = new byte[2048];
