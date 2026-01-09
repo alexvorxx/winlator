@@ -956,6 +956,15 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/zink-" + DefaultVersion.ZINK + ".tzst", rootDir);
             }
         }
+        else if (graphicsDriver.startsWith("freedreno")) {
+            envVars.put("GALLIUM_DRIVER", "freedreno");
+            envVars.put("MESA_LOADER_DRIVER_OVERRIDE", "kgsl");
+            envVars.put("vblank_mode", "0");
+
+            if (changed) {
+                TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/freedreno-" + DefaultVersion.FREEDRENO + ".tzst", rootDir);
+            }
+        }
         else if (graphicsDriver.startsWith("llvmpipe")) {
             if (dxwrapper.contains("dxvk") || dxwrapper.contains("vkd3d"))
                 DXVK_VKD3DConfigDialog.setEnvVars(this, dxwrapperConfig, envVars);

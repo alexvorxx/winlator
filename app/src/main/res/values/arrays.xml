@@ -19,6 +19,7 @@
         <item>Turnip-24.1.0</item>
         <item>VirGL-23.1.9</item>
         <item>Vortek-2.0/2.1</item>
+        <item>Freedreno-26.0.0</item>
         <item>LLVMPipe-25.0.0</item>
     </string-array>
     <string-array name="audio_driver_entries">
@@ -94,11 +95,11 @@
         <item>4.6</item>
     </string-array>
     <string-array name="max_device_memory_entries">
-        <item>0 (No limit)</item>
         <item>512 MB</item>
         <item>1024 MB</item>
         <item>2048 MB</item>
         <item>4096 MB</item>
+        <item>0 (No limit)</item>
     </string-array>
     <string-array name="image_cache_size_entries">
         <item>64 MB</item>
