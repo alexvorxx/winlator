@@ -20,7 +20,8 @@ public class Drawable extends XResource {
     private Callback<Drawable> onDestroyListener;
     public final Object renderLock = new Object();
 
-    private boolean blank = true; ///
+    private boolean blank = true;
+    private boolean offscreenStorage = false;
 
     static {
         System.loadLibrary("winlator7");
@@ -56,7 +57,15 @@ public class Drawable extends XResource {
 
     public void setData(ByteBuffer data) {
         this.data = data;
-        this.blank = false; ///
+        this.blank = false;
+    }
+
+    public boolean isOffscreenStorage() {
+        return this.offscreenStorage;
+    }
+
+    public void setOffscreenStorage(boolean offscreenStorage) {
+        this.offscreenStorage = offscreenStorage;
     }
 
     private short getStride() {
@@ -184,16 +193,16 @@ public class Drawable extends XResource {
         if (onDrawListener != null) onDrawListener.run();
     }
 
-    ///
     public void forceUpdate() {
-        texture.setNeedsUpdate(true);
-        blank = false;
-        Runnable runnable = this.onDrawListener;
-        if (runnable != null)
-            runnable.run();
+        if (!this.offscreenStorage) {
+            texture.setNeedsUpdate(true);
+            blank = false;
+            Runnable runnable = this.onDrawListener;
+            if (runnable != null)
+                runnable.run();
+        }
     }
 
-    ///
     public boolean isBlank() {
         return this.blank;
     }

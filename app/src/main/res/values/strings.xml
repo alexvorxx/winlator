@@ -152,6 +152,7 @@
     <string name="xserver" translatable="false">XServer</string>
     <string name="mouse_and_touchpad" translatable="false">Mouse and Touchpad</string>
     <string name="use_dri3_extension">Use DRI3 extension</string>
+    <string name="use_composite_extension" translatable="false">Use Composite extension</string>
     <string name="width">Width</string>
     <string name="height">Height</string>
     <string name="old">old</string>

@@ -33,6 +33,7 @@ public class WindowAttributes {
     private boolean overrideRedirect = false;
     private boolean saveUnder = false;
     private boolean enabled = true;
+    private boolean renderSubwindows = true;
     private WinGravity winGravity = WinGravity.CENTER;
     private WindowClass windowClass = WindowClass.INPUT_OUTPUT;
     public final Window window;
@@ -77,6 +78,10 @@ public class WindowAttributes {
     public void setMapped(boolean mapped) {
         this.mapped = mapped;
     }
+
+    public boolean isRenderSubwindows() { return renderSubwindows; }
+
+    public void setRenderSubwindows(boolean renderSubwindows) { this.renderSubwindows = renderSubwindows; }
 
     public boolean isOverrideRedirect() {
         return overrideRedirect;

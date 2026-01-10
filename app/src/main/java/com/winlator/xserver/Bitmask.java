@@ -13,6 +13,16 @@ public class Bitmask implements Iterable<Integer> {
         this.bits = bits;
     }
 
+    public Bitmask(int[] bitsArray) {
+        byte b = 0;
+        this.bits = 0;
+        int i = bitsArray.length;
+        while (b < i) {
+            set(bitsArray[b]);
+            b++;
+        }
+    }
+
     public boolean isSet(int flag) {
         return (flag & this.bits) != 0;
     }

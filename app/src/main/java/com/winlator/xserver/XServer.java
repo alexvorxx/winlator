@@ -1,5 +1,6 @@
 package com.winlator.xserver;
 
+import android.util.Log;
 import android.util.SparseArray;
 
 import com.winlator.core.CursorLocker;
@@ -11,6 +12,7 @@ import com.winlator.xserver.extensions.Extension;
 import com.winlator.xserver.extensions.MITSHMExtension;
 import com.winlator.xserver.extensions.PresentExtension;
 import com.winlator.xserver.extensions.SyncExtension;
+import com.winlator.xserver.extensions.XComposite;
 
 import java.nio.charset.Charset;
 import java.util.EnumMap;
@@ -187,6 +189,10 @@ public class XServer {
         extensions.put(DRI3Extension.MAJOR_OPCODE, new DRI3Extension());
         extensions.put(PresentExtension.MAJOR_OPCODE, new PresentExtension());
         extensions.put(SyncExtension.MAJOR_OPCODE, new SyncExtension());
+        if (screenInfo.enableCompositeExtension) {
+            Log.d("XServer", "Composite extension enabled");
+            extensions.put(XComposite.MAJOR_OPCODE, new XComposite());
+        }
     }
 
     public <T extends Extension> T getExtension(int opcode) {

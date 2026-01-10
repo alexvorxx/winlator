@@ -148,6 +148,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private Runnable configChangedCallback = null;
     private boolean capturePointerOnExternalMouse = true;
     private final float[] xform = XForm.getInstance();
+    private ScreenInfo screeninfo;
 
     private boolean useOldVirGL;
 
@@ -303,7 +304,10 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
         inputControlsManager = new InputControlsManager(this);
 
-        xServer = new XServer(new ScreenInfo(screenSize));
+        screeninfo = new ScreenInfo(screenSize);
+        screeninfo.enableCompositeExtension = preferences.getBoolean("use_composite", false);
+
+        xServer = new XServer(screeninfo);
         xServer.setWinHandler(winHandler);
         boolean[] winStarted = {false};
         xServer.windowManager.addOnWindowModificationListener(new WindowManager.OnWindowModificationListener() {

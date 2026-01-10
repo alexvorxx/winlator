@@ -1,5 +1,6 @@
 package com.winlator.xserver;
 
+import android.util.ArrayMap;
 import android.util.SparseArray;
 
 import com.winlator.xserver.events.Event;
@@ -34,6 +35,8 @@ public class Window extends XResource {
     private final ArrayList<Window> children = new ArrayList<>();
     private final List<Window> immutableChildren = Collections.unmodifiableList(children);
     private final ArrayList<EventListener> eventListeners = new ArrayList<>();
+
+    private ArrayMap<String, Object> tags;
 
     public Window(int id, Drawable content, int x, int y, int width, int height, XClient originClient) {
         super(id);
@@ -329,6 +332,26 @@ public class Window extends XResource {
             window = window.parent;
         }
         return rootY;
+    }
+
+    public Object getTag(String tag, Object value) {
+        ArrayMap<String, Object> arrayMap2 = this.tags;
+        ArrayMap<String, Object> arrayMap1 = arrayMap2;
+        if (arrayMap2 == null) {
+            arrayMap1 = new ArrayMap();
+            this.tags = arrayMap1;
+        }
+        return arrayMap1.getOrDefault(tag, value);
+    }
+
+    public void setTag(String tag, Object value) {
+        ArrayMap<String, Object> arrayMap2 = this.tags;
+        ArrayMap<String, Object> arrayMap1 = arrayMap2;
+        if (arrayMap2 == null) {
+            arrayMap1 = new ArrayMap();
+            this.tags = arrayMap1;
+        }
+        arrayMap1.put(tag, value);
     }
 
     public Window getAncestorWithEventMask(Bitmask eventMask) {

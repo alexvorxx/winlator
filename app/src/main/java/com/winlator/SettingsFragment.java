@@ -185,6 +185,9 @@ public class SettingsFragment extends Fragment {
         final CheckBox cbUseDRI3 = view.findViewById(R.id.CBUseDRI3);
         cbUseDRI3.setChecked(preferences.getBoolean("use_dri3", true));
 
+        final CheckBox cbUseComposite = view.findViewById(R.id.CBUseComposite);
+        cbUseComposite.setChecked(preferences.getBoolean("use_composite", false));
+
         final CheckBox cbUseXR = view.findViewById(R.id.CBUseXR);
         cbUseXR.setChecked(preferences.getBoolean("use_xr", true));
         if (!XrActivity.isSupported()) {
@@ -269,6 +272,7 @@ public class SettingsFragment extends Fragment {
             editor.putBoolean("capture_pointer_on_external_mouse", cbCapturePointerOnExternalMouse.isChecked());
             editor.putBoolean("haptics", cbHaptics.isChecked());
             editor.putBoolean("use_dri3", cbUseDRI3.isChecked());
+            editor.putBoolean("use_composite", cbUseComposite.isChecked());
             editor.putBoolean("use_xr", cbUseXR.isChecked());
             editor.putFloat("cursor_speed", sbCursorSpeed.getProgress() / 100.0f);
             editor.putBoolean("enable_wine_debug", cbEnableWineDebug.isChecked());

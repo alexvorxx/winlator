@@ -192,6 +192,7 @@ public class WindowManager extends XResourceManager {
             Drawable oldContent = window.getContent();
             drawableManager.removeDrawable(oldContent.id);
             Drawable newContent = drawableManager.createDrawable(oldContent.id, width, height, oldContent.visual);
+            newContent.setOffscreenStorage(oldContent.isOffscreenStorage());
             newContent.setOnDrawListener(() -> triggerOnUpdateWindowContent(window));
             window.setContent(newContent);
         }

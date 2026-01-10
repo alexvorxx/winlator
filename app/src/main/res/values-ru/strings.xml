@@ -147,6 +147,7 @@
     <string name="xserver" translatable="false">XServer</string>
     <string name="mouse_and_touchpad">Мышь и сенсорный экран</string>
     <string name="use_dri3_extension">Использовать расширение DRI3</string>
+    <string name="use_composite_extension">Использовать расширение Composite</string>
     <string name="width">Ширина</string>
     <string name="height">Высота</string>
     <string name="old">старый</string>
