@@ -7,6 +7,10 @@ import java.util.Iterator;
 public class KeyValueSet implements Iterable<String[]> {
     private String data = "";
 
+    public KeyValueSet() {
+        this.data = "";
+    }
+
     public KeyValueSet(String data) {
         this.data = data != null && !data.isEmpty() ? data : "";
     }
@@ -66,17 +70,14 @@ public class KeyValueSet implements Iterable<String[]> {
         }
     }
 
-    ///
     public boolean isEmpty() {
         return this.data.isEmpty();
     }
 
-    ///
     public boolean getBoolean(String paramString) {
         return getBoolean(paramString, false);
     }
 
-    ///
     public boolean getBoolean(String paramString, boolean paramBoolean) {
         paramString = get(paramString);
         if (!paramString.isEmpty()) {
@@ -85,6 +86,16 @@ public class KeyValueSet implements Iterable<String[]> {
             paramBoolean = false;
         }
         return paramBoolean;
+    }
+
+    public float getFloat(String key, float fallback) {
+        String value = get(key);
+        try {
+            if (!value.isEmpty()) return Float.parseFloat(value);
+        } catch (NumberFormatException e) {
+            // Ignore exception and return fallback
+        }
+        return fallback;
     }
 
     @NonNull

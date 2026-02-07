@@ -23,7 +23,7 @@ import com.winlator.core.Callback;
 import java.util.ArrayList;
 
 public class ContentDialog extends Dialog {
-    private Runnable onConfirmCallback;
+    public Runnable onConfirmCallback;
     private Runnable onCancelCallback;
     private final View contentView;
 

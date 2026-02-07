@@ -40,6 +40,7 @@ import com.winlator.contentdialog.ContentDialog;
 import com.winlator.contentdialog.DXVK_VKD3DConfigDialog;
 import com.winlator.contentdialog.DebugDialog;
 import com.winlator.contentdialog.NavigationDialog;
+import com.winlator.contentdialog.ScreenEffectDialog;
 import com.winlator.contentdialog.VirGLConfigDialog;
 import com.winlator.contents.ContentProfile;
 import com.winlator.contents.ContentsManager;
@@ -66,6 +67,10 @@ import com.winlator.math.Mathf;
 import com.winlator.midi.MidiHandler;
 import com.winlator.midi.MidiManager;
 import com.winlator.renderer.GLRenderer;
+import com.winlator.renderer.effects.CRTEffect;
+import com.winlator.renderer.effects.FXAAEffect;
+import com.winlator.renderer.effects.NTSCCombinedEffect;
+import com.winlator.renderer.effects.ToonEffect;
 import com.winlator.widget.FrameRating;
 import com.winlator.widget.InputControlsView;
 import com.winlator.widget.MagnifierView;
@@ -149,6 +154,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private boolean capturePointerOnExternalMouse = true;
     private final float[] xform = XForm.getInstance();
     private ScreenInfo screeninfo;
+    private String screenEffectProfile;
 
     private boolean useOldVirGL;
 
@@ -506,6 +512,31 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 break;
             case R.id.main_menu_pip_mode:
                 enterPictureInPictureMode();
+                drawerLayout.closeDrawers();
+                break;
+            case R.id.main_menu_screen_effects:
+                Log.d("ScreenEffectDialog", "Initializing ScreenEffectDialog");
+                ScreenEffectDialog screenEffectDialog = new ScreenEffectDialog(this);
+                screenEffectDialog.setOnConfirmCallback(() -> {
+                    Log.d("ScreenEffectDialog", "Confirm callback triggered. About to apply effects.");
+                    GLRenderer currentRenderer = xServerView.getRenderer();
+                    FXAAEffect fxaaEffect = (FXAAEffect) currentRenderer.getEffectComposer().getEffect(FXAAEffect.class);
+                    CRTEffect crtEffect = (CRTEffect) currentRenderer.getEffectComposer().getEffect(CRTEffect.class);
+                    ToonEffect toonEffect = (ToonEffect) currentRenderer.getEffectComposer().getEffect(ToonEffect.class);
+                    NTSCCombinedEffect ntscEffect = (NTSCCombinedEffect) currentRenderer.getEffectComposer().getEffect(NTSCCombinedEffect.class);
+
+                    // Check if effects are null before applying
+                    Log.d("ScreenEffectDialog", "FXAAEffect: " + (fxaaEffect != null));
+                    Log.d("ScreenEffectDialog", "CRTEffect: " + (crtEffect != null));
+                    Log.d("ScreenEffectDialog", "ToonEffect: " + (toonEffect != null));
+                    Log.d("ScreenEffectDialog", "NTSCCombinedEffect: " + (ntscEffect != null));
+
+                    Log.d("ScreenEffectDialog", "Calling applyEffects()");
+                    screenEffectDialog.applyEffects(currentRenderer, fxaaEffect, crtEffect, toonEffect, ntscEffect);
+                    Log.d("ScreenEffectDialog", "applyEffects() called.");
+                });
+                Log.d("ScreenEffectDialog", "Showing ScreenEffectDialog");
+                screenEffectDialog.show();
                 drawerLayout.closeDrawers();
                 break;
             case R.id.main_menu_logs:
@@ -1438,5 +1469,13 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             }
         });
         t.start();
+    }
+
+    public String getScreenEffectProfile() {
+        return screenEffectProfile;
+    }
+
+    public void setScreenEffectProfile(String screenEffectProfile) {
+        this.screenEffectProfile = screenEffectProfile;
     }
 }

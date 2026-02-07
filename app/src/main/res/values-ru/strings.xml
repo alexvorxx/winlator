@@ -397,6 +397,15 @@
     <string name="thumbstick_up">Джойстик вверх</string>
     <string name="thumbstick_down">Джойстик вниз</string>
 
+    <string name="do_you_want_to_add_a_new_profile">Вы хотите добавить новый профиль?</string>
+    <string name="default_profile">Профиль по умолчанию</string>
+    <string name="screen_effect">Эффекты постобработки</string>
+    <string name="enable_fxaa">Включить FXAA</string>
+    <string name="enable_crt_shader">Включить CRT шейдер</string>
+    <string name="enable_toon_shader">Включить Toon шейдер</string>
+    <string name="enable_ntsc_effect">Включить эффект NTSC</string>
+    <string name="enter_profile_name">Введите имя профиля</string>
+
     <string name="pref_main">Preferences</string>
     <string name="pref_output">Output</string>
     <string name="pref_pointer">Pointer</string>

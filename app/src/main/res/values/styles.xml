@@ -202,4 +202,15 @@
         <item name="android:src">@drawable/icon_help</item>
         <item name="tint">#e0e0e0</item>
     </style>
+    <style name="Toolbox">
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
+<!--        <item name="android:background">@drawable/toolbox</item>-->
+        <item name="android:paddingLeft">8.0dip</item>
+        <item name="android:paddingTop">2.0dip</item>
+        <item name="android:paddingRight">8.0dip</item>
+        <item name="android:paddingBottom">2.0dip</item>
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">40.0dip</item>
+    </style>
 </resources>

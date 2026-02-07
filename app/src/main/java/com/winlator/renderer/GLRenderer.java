@@ -32,7 +32,7 @@ import javax.microedition.khronos.opengles.GL10;
 public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindowModificationListener, Pointer.OnPointerMotionListener {
     public final XServerView xServerView;
     private final XServer xServer;
-    private final VertexAttribute quadVertices = new VertexAttribute("position", 2);
+    public final VertexAttribute quadVertices = new VertexAttribute("position", 2);
     private final float[] tmpXForm1 = XForm.getInstance();
     private final float[] tmpXForm2 = XForm.getInstance();
     private final CursorMaterial cursorMaterial = new CursorMaterial();
@@ -43,19 +43,21 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
     private String forceFullscreenWMClass = null;
     private boolean fullscreen = false;
     private boolean toggleFullscreen = false;
-    private boolean viewportNeedsUpdate = true;
+    public boolean viewportNeedsUpdate = true;
     private boolean cursorVisible = true;
     private boolean rootWindowDownsized = false;
     private boolean screenOffsetYRelativeToCursor = false;
     private String[] unviewableWMClasses = null;
     private float magnifierZoom = 1.0f;
     private boolean magnifierEnabled = true;
-    private int surfaceWidth;
-    private int surfaceHeight;
+    public int surfaceWidth;
+    public int surfaceHeight;
+    private final EffectComposer effectComposer;
 
     public GLRenderer(XServerView xServerView, XServer xServer) {
         this.xServerView = xServerView;
         this.xServer = xServer;
+        this.effectComposer = new EffectComposer(this);
         rootCursorDrawable = createRootCursorDrawable();
 
         quadVertices.put(new float[]{
@@ -112,7 +114,7 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
         drawFrame();
     }
 
-    private void drawFrame() {
+    public void drawFrame() {
         boolean xrFrame = false;
         boolean xrImmersive = false;
         if (XrActivity.isEnabled(null)) {
@@ -167,6 +169,11 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
         if (cursorVisible && !rootWindowDownsized) renderCursor();
 
         if (!magnifierEnabled && !fullscreen) GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
+
+        // Apply all the effects using EffectComposer
+        if (effectComposer.hasEffects()) {
+            effectComposer.render();  // <-- This line applies the effects
+        }
 
         if (xrFrame) {
             XrActivity.getInstance().endFrame();
@@ -429,5 +436,47 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
     public void setMagnifierZoom(float magnifierZoom) {
         this.magnifierZoom = magnifierZoom;
         xServerView.requestRender();
+    }
+
+    public int getSurfaceWidth() {
+        return surfaceWidth;
+    }
+
+    public int getSurfaceHeight() {
+        return surfaceHeight;
+    }
+
+    public boolean isViewportNeedsUpdate() {
+        return viewportNeedsUpdate;
+    }
+
+    public void setViewportNeedsUpdate(boolean viewportNeedsUpdate) {
+        this.viewportNeedsUpdate = viewportNeedsUpdate;
+    }
+
+    public VertexAttribute getQuadVertices() {
+        return quadVertices;
+    }
+
+    public EffectComposer getEffectComposer (){
+        return effectComposer;
+    }
+
+    private void renderWindowEffect(Drawable drawable, int x, int y, ShaderMaterial material) {
+        // Implement the rendering effect logic here
+        synchronized (drawable.renderLock) {
+            Texture texture = drawable.getTexture();
+            texture.updateFromDrawable(drawable);
+
+            XForm.set(tmpXForm1, x, y, drawable.width, drawable.height);
+            XForm.multiply(tmpXForm1, tmpXForm1, tmpXForm2);
+
+            GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture.getTextureId());
+            GLES20.glUniform1i(material.getUniformLocation("texture"), 0);
+            GLES20.glUniform1fv(material.getUniformLocation("xform"), tmpXForm1.length, tmpXForm1, 0);
+            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, quadVertices.count());
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+        }
     }
 }
