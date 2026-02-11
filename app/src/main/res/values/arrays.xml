@@ -72,6 +72,8 @@
     <string-array name="dxvk_framerate_entries">
         <item>0 (Default)</item>
         <item>15</item>
+        <item>20</item>
+        <item>25</item>
         <item>30</item>
         <item>45</item>
         <item>60</item>

@@ -140,4 +140,8 @@ public class ShaderMaterial {
             Log.e("ShaderMaterial", "Uniform location for " + uniformName + " not found!");
         }
     }
+
+    public int getProgram() {
+        return programId;
+    }
 }

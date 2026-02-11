@@ -1,22 +1,91 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout android:orientation="vertical" android:layout_width="wrap_content" android:layout_height="wrap_content"
-  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
-    <LinearLayout android:orientation="horizontal" android:layout_width="520.0dip" android:layout_height="wrap_content">
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:background="#FFFFFF"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="520.0dip"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
         <View style="@style/VerticalLine" />
-        <LinearLayout android:orientation="vertical" android:layout_width="0.0dip" android:layout_height="wrap_content" android:layout_weight="1.0">
-            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/profile" />
-            <LinearLayout android:gravity="center_vertical" android:orientation="horizontal" android:layout_width="fill_parent" android:layout_height="wrap_content">
-                <Spinner android:id="@id/SProfile" android:layout_width="0.0dip" android:layout_height="wrap_content" android:layout_weight="1.0" style="@style/ComboBox" />
+
+        <LinearLayout
+            android:layout_width="0.0dip"
+            android:layout_height="wrap_content"
+            android:layout_weight="1.0"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/profile" />
+
+            <LinearLayout
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <Spinner
+                    android:id="@id/SProfile"
+                    style="@style/ComboBox"
+                    android:layout_width="0.0dip"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1.0" />
+
                 <LinearLayout style="@style/Toolbox">
-                    <ImageButton android:id="@id/BTAddProfile" android:src="@drawable/icon_add" style="@style/ListMenuButton" />
-                    <ImageButton android:id="@id/BTRemoveProfile" android:layout_marginRight="0.0dip" android:src="@drawable/icon_remove" style="@style/ListMenuButton" />
+
+                    <ImageButton
+                        android:id="@id/BTAddProfile"
+                        style="@style/ListMenuButton"
+                        android:src="@drawable/icon_add" />
+
+                    <ImageButton
+                        android:id="@id/BTRemoveProfile"
+                        style="@style/ListMenuButton"
+                        android:layout_marginRight="0.0dip"
+                        android:src="@drawable/icon_remove" />
                 </LinearLayout>
             </LinearLayout>
-            <CheckBox android:id="@+id/CBEnableFXAA" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8.0dip" android:text="@string/enable_fxaa" />
-            <CheckBox android:id="@+id/CBEnableCRTShader" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/enable_crt_shader" />
-            <CheckBox android:id="@+id/CBEnableToonShader" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/enable_toon_shader" />
-            <CheckBox android:id="@+id/CBEnableNTSCEffect" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/enable_ntsc_effect" />
 
+            <CheckBox
+                android:id="@+id/CBEnableFXAA"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8.0dip"
+                android:text="@string/enable_fxaa" />
+
+            <CheckBox
+                android:id="@+id/CBEnableCRTShader"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/enable_crt_shader" />
+
+            <CheckBox
+                android:id="@+id/CBEnableToonShader"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/enable_toon_shader" />
+
+            <CheckBox
+                android:id="@+id/CBEnableNTSCEffect"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/enable_ntsc_effect" />
+
+<!--            <View style="@style/HorizontalLine" />-->
+
+            <Button
+                android:id="@+id/ButtonAddGenerationView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="start"
+                android:text="@string/frame_generation"
+                android:visibility="visible"/>
 
         </LinearLayout>
     </LinearLayout>

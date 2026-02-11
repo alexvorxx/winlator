@@ -260,6 +260,7 @@ public class X11Activity extends AppCompatActivity implements View.OnApplyWindow
         menu.findItem(R.id.main_menu_logs).setVisible(enableLogs);
         //if (XrActivity.isEnabled(this)) // TODO
             menu.findItem(R.id.main_menu_magnifier).setVisible(false);
+        menu.findItem(R.id.main_menu_screen_effects).setVisible(false);
         navigationView.setNavigationItemSelectedListener(this);
         navigationView.setPointerIcon(PointerIcon.getSystemIcon(this, PointerIcon.TYPE_ARROW));
         navigationView.setOnFocusChangeListener((v, hasFocus) -> navigationFocused = hasFocus);
@@ -852,6 +853,8 @@ public class X11Activity extends AppCompatActivity implements View.OnApplyWindow
             case R.id.main_menu_pip_mode:
                 enterPictureInPictureMode();
                 drawerLayout.closeDrawers();
+                break;
+            case R.id.main_menu_screen_effects:
                 break;
             case R.id.main_menu_logs:
                 debugDialog.show();

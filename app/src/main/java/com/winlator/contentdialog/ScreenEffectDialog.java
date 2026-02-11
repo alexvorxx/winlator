@@ -1,13 +1,18 @@
 package com.winlator.contentdialog;
 
+import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.os.Build;
+import android.util.DisplayMetrics;
 import android.util.Log;
+import android.view.Display;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
-import android.widget.Button;
 import android.widget.CheckBox;
+import android.widget.FrameLayout;
 import android.widget.Spinner;
 import android.widget.TextView;
 
@@ -20,8 +25,10 @@ import com.winlator.core.KeyValueSet;
 import com.winlator.renderer.GLRenderer;
 import com.winlator.renderer.effects.CRTEffect;
 import com.winlator.renderer.effects.FXAAEffect;
+import com.winlator.renderer.effects.FrameGenerationEffect;
 import com.winlator.renderer.effects.NTSCCombinedEffect;
 import com.winlator.renderer.effects.ToonEffect;
+import com.winlator.widget.FrameGenerationView;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -105,7 +112,7 @@ public class ScreenEffectDialog extends ContentDialog {
             Log.d(TAG, "Dialog dismissed.");
         });
 
-
+        findViewById(R.id.ButtonAddGenerationView).setOnClickListener(v -> addFrameGenerationView());
 
         findViewById(R.id.BTAddProfile).setOnClickListener(v -> promptAddProfile());
         findViewById(R.id.BTRemoveProfile).setOnClickListener(v -> promptDeleteProfile());
@@ -120,6 +127,28 @@ public class ScreenEffectDialog extends ContentDialog {
             Log.d(TAG, "Dialog dismissed after callback.");
         });
 
+    }
+
+    private void addFrameGenerationView() {
+        if (activity.frameGenerationView == null) {
+            GLRenderer currentRenderer = activity.getXServerView().getRenderer();
+
+            final FrameLayout container = activity.findViewById(R.id.FLXServerDisplay);
+            activity.frameGenerationView = new FrameGenerationView(activity, currentRenderer);
+            activity.frameGenerationView.setFrameGenerationCallback((value) -> {
+                FrameGenerationEffect frameGenerationEffect = (FrameGenerationEffect) currentRenderer.getEffectComposer().getEffect(FrameGenerationEffect.class);
+                applyFrameGenerationEffect(currentRenderer, frameGenerationEffect, value);
+            });
+
+            activity.frameGenerationView.setHideButtonCallback(() -> {
+                activity.frameGenerationView.setVisibility(View.GONE);
+            });
+
+            container.addView(activity.frameGenerationView);
+        } else {
+            activity.frameGenerationView.setVisibility(View.VISIBLE);
+        }
+        dismiss();
     }
 
     private static void applyFieldSetLabelStyle(TextView textView, boolean isDarkMode) {
@@ -331,5 +360,97 @@ public class ScreenEffectDialog extends ContentDialog {
     public void setOnConfirmCallback(Runnable confirmCallback) {
         Log.d(TAG, "Setting OnConfirm callback.");
         this.onConfirmCallback = confirmCallback;
+    }
+
+    public void applyFrameGenerationEffect(GLRenderer renderer, FrameGenerationEffect frameGenerationEffect, Boolean enableFrameGenerationEffect) {
+        Log.d(TAG, "applyFrameGenerationEffect(): enableFrameGenerationEffect = " + enableFrameGenerationEffect);
+
+        if (renderer == null) {
+            Log.e(TAG, "Renderer is null!");
+            return;
+        }
+
+        if (renderer.getEffectComposer() == null) {
+            Log.e(TAG, "EffectComposer is null!");
+            return;
+        }
+
+        if (enableFrameGenerationEffect) {
+            if (frameGenerationEffect == null) {
+                Log.d(TAG, "FrameGenerationEffect is null, creating and adding new instance.");
+                frameGenerationEffect = new FrameGenerationEffect();
+                renderer.getEffectComposer().addEffect(frameGenerationEffect);
+                frameGenerationEffect.toggleGeneration();
+                frameGenerationEffect.setDisplayRefreshRate(getRefreshRate());
+            } else {
+                Log.d(TAG, "FrameGenerationEffect is already added.");
+            }
+        } else if (frameGenerationEffect != null) {
+            Log.d(TAG, "FrameGenerationEffect is disabled. Removing FrameGenerationEffect.");
+            frameGenerationEffect.toggleGeneration();
+            renderer.getEffectComposer().removeEffect(frameGenerationEffect);
+        } else {
+            Log.d(TAG, "FrameGenerationEffect failed to disable.");
+        }
+
+    }
+
+    public int getRefreshRate() {
+        int refreshRate = 60;
+
+        try {
+            WindowManager windowManager = (WindowManager) this.getContext().getSystemService(Context.WINDOW_SERVICE);
+            if (windowManager != null) {
+                Display display = windowManager.getDefaultDisplay();
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    // Android 11+ (API 30)
+                    refreshRate = (int) display.getRefreshRate();
+                    Log.d(TAG, "Using Android R+ method, refresh rate: " + refreshRate + "Hz");
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    // Android 6.0+ (API 23)
+                    Display.Mode mode = display.getMode();
+                    refreshRate = (int) mode.getRefreshRate();
+                    Log.d(TAG, "Using Android M+ method, refresh rate: " + refreshRate + "Hz");
+                } else {
+                    // Android < 6.0
+                    DisplayMetrics metrics = new DisplayMetrics();
+                    display.getMetrics(metrics);
+                    refreshRate = (int) metrics.densityDpi; // Это не совсем точный метод
+                    Log.d(TAG, "Using legacy method, approximate refresh rate: " + refreshRate + "Hz");
+
+                    refreshRate = 60;
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error detecting refresh rate: " + e.getMessage());
+            refreshRate = 60; // fallback
+        }
+
+        refreshRate = roundToStandardRefreshRate(refreshRate);
+        Log.i(TAG, "Final refresh rate: " + refreshRate + "Hz");
+
+        return refreshRate;
+    }
+
+    private static int roundToStandardRefreshRate(int rate) {
+        int[] standardRates = {30, 45, 48, 50, 60, 72, 75, 90, 96, 100, 120, 144, 165, 240, 360};
+
+        int closest = 60;
+        int minDiff = Integer.MAX_VALUE;
+
+        for (int standard : standardRates) {
+            int diff = Math.abs(rate - standard);
+            if (diff < minDiff) {
+                minDiff = diff;
+                closest = standard;
+            }
+        }
+
+        if (rate < 30) {
+            return 60;
+        }
+
+        return closest;
     }
 }

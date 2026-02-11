@@ -405,11 +405,12 @@
 
     <string name="do_you_want_to_add_a_new_profile" translatable="false">Do you want to add a new profile?</string>
     <string name="default_profile" translatable="false">Default Profile</string>
-    <string name="screen_effect" translatable="false">Post-processing effects</string>
+    <string name="screen_effect" translatable="false">Screen effects</string>
     <string name="enable_fxaa" translatable="false">Enable FXAA</string>
     <string name="enable_crt_shader" translatable="false">Enable CRT Shader</string>
     <string name="enable_toon_shader" translatable="false">Enable Toon Shader</string>
     <string name="enable_ntsc_effect" translatable="false">Enable NTSC Effect</string>
+    <string name="enable_custom_effect" translatable="false">Enable Frame Interpolation</string>
     <string name="enter_profile_name" translatable="false">Enter Profile Name</string>
 
     <string name="not_connected" translatable="false">Not connected</string>
@@ -534,4 +535,11 @@ E.g. <b>META</b> for <i>META key</i>, \n
     <string name="all_files_access_required" translatable="false">All Files Access Required</string>
     <string name="external_storage_access" translatable="false">External storage access</string>
     <string name="request_access" translatable="false">Request access</string>
+
+    <string name="frame_generation" translatable="false">Frame generation</string>
+    <string name="off" translatable="false">OFF</string>
+    <string name="on" translatable="false">ON</string>
+    <string name="target_fps" translatable="false">FPS:</string>
+    <string name="current_fps" translatable="false">Current: -- FPS → -- FPS</string>
+    <string name="generation_mode" translatable="false">Mode:</string>
 </resources>

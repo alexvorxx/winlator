@@ -399,7 +399,7 @@
 
     <string name="do_you_want_to_add_a_new_profile">Вы хотите добавить новый профиль?</string>
     <string name="default_profile">Профиль по умолчанию</string>
-    <string name="screen_effect">Эффекты постобработки</string>
+    <string name="screen_effect">Эффекты экрана</string>
     <string name="enable_fxaa">Включить FXAA</string>
     <string name="enable_crt_shader">Включить CRT шейдер</string>
     <string name="enable_toon_shader">Включить Toon шейдер</string>
@@ -508,4 +508,10 @@
     <string name="all_files_access_required" translatable="false">Требуется доступ ко всем файлам.</string>
     <string name="external_storage_access" translatable="false">Доступ к внешним накопителям</string>
     <string name="request_access" translatable="false">Запросить доступ</string>
+
+    <string name="frame_generation" translatable="false">Генерация кадров</string>
+    <string name="off">ВЫКЛ</string>
+    <string name="on">ВКЛ</string>
+    <string name="target_fps">FPS:</string>
+    <string name="generation_mode">Режим:</string>
 </resources>

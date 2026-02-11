@@ -243,6 +243,7 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
                 "D8VK (<a href=\"https://github.com/AlpyneDreams/d8vk\">github.com/AlpyneDreams/d8vk</a>)",
                 "CNC DDraw (<a href=\"https://github.com/FunkyFr3sh/cnc-ddraw\">github.com/FunkyFr3sh/cnc-ddraw</a>)",
                 "dgVoodoo (<a href=\"https://dege.freeweb.hu/dgVoodoo2\">dege.freeweb.hu/dgVoodoo2</a>)",
+                "linux-fg (<a href=\"https://github.com/xXJSONDeruloXx/linux-fg\">github.com/xXJSONDeruloXx/linux-fg</a>)",
                 "Original Winlator(<a href=\"https://github.com/brunodev85/winlator\">github.com/brunodev85/winlator</a>)",
                 "Winlator Bionic (<a href=\"https://github.com/Pipetto-crypto/winlator/tree/winlator_bionic\">github.com/Pipetto-crypto/winlator</a>)"
             );
