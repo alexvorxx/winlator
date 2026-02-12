@@ -50,6 +50,8 @@ public class EffectComposer {
     }
 
     public synchronized void addEffect(Effect effect) {
+        if (frameGenerationEffect != null)
+            return;
         if (!effects.contains(effect)) {
             effects.add(effect);
             if (effect instanceof FrameGenerationEffect) {
