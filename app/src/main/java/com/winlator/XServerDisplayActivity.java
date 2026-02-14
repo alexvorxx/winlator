@@ -323,7 +323,15 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                     winStarted[0] = true;
                 }
 
-                if (window.id == frameRatingWindowId) frameRating.update();
+                if (window.id == frameRatingWindowId) {
+                    frameRating.update();
+                    xServerView.queueEvent(() -> {
+                        GLRenderer renderer = xServerView.getRenderer();
+                        if (renderer != null && renderer.getEffectComposer() != null) {
+                            renderer.getEffectComposer().updateFPS();
+                        }
+                    });
+                }
             }
 
             @Override

@@ -1,6 +1,7 @@
 package com.winlator.renderer;
 
 import android.opengl.GLES20;
+import android.os.SystemClock;
 import android.util.Log;
 
 import com.winlator.renderer.effects.Effect;
@@ -25,6 +26,10 @@ public class EffectComposer {
     private FrameGenerationEffect frameGenerationEffect;
 
     public static final boolean logEnabled = false;
+
+    private long lastTime = 0;
+    private int frameCount = 0;
+    private long lastFPS = 0;
 
     private void LogString(String message) {
         if (logEnabled)
@@ -260,7 +265,12 @@ public class EffectComposer {
         if (frameGenerationEffect != null) {
             if (frameGenerationEffect.isEnabled()) {
                 Log.d(TAG, "FrameGenerationEffect restart");
-                int targetFPS = frameGenerationEffect.getTargetFPS();
+                int targetFPS;
+                if (frameGenerationEffect.isAutoDetectFPS())
+                    targetFPS = 0;
+                else
+                    targetFPS = frameGenerationEffect.getTargetFPS();
+
                 frameGenerationEffect.toggleGeneration();
                 removeEffect(frameGenerationEffect);
 
@@ -271,6 +281,22 @@ public class EffectComposer {
             }
             frameGenerationEffect.setGenerationMode(mode);
         }
+    }
+
+    public synchronized void updateFPS() {
+        if (lastTime == 0) lastTime = SystemClock.elapsedRealtime();
+        long time = SystemClock.elapsedRealtime();
+        if (time >= lastTime + 500) {
+            lastFPS = (frameCount * 1000L) / (time - lastTime);
+            lastTime = time;
+            frameCount = 0;
+            if (renderer != null && renderer.effectComposer != null && frameGenerationEffect != null) {
+                if (frameGenerationEffect.isEnabled() && frameGenerationEffect.isAutoDetectFPS() ) {
+                    frameGenerationEffect.updateFPS((int) lastFPS);
+                }
+            }
+        }
+        frameCount++;
     }
 
     public synchronized FrameGenerationSettings getFrameGenerationSettings() {

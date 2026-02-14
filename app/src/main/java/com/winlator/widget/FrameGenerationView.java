@@ -218,9 +218,9 @@ public class FrameGenerationView extends FrameLayout {
                 String text = String.format("Current: %d FPS → %d FPS", realFPS, targetFPS);
                 currentFpsTextView.setText(text);
 
-                if (settings.autoDetect) {
+                /*if (settings.autoDetect) {
                     updateFpsSpinnerForAutoMode(realFPS);
-                }
+                }*/
             }
         }
     }

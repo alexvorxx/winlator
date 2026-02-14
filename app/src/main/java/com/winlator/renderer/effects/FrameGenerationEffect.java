@@ -151,13 +151,8 @@ public class FrameGenerationEffect extends Effect {
     }
 
     private void updateFrameIntervals() {
-        if (autoDetectFPS) {
-            currentRealFrameIntervalNs = calculateAverageFrameInterval();
-            currentTargetFrameIntervalNs = currentRealFrameIntervalNs / 2;
-        } else {
-            currentRealFrameIntervalNs = NANOS_PER_SECOND / targetFPS;
-            currentTargetFrameIntervalNs = currentRealFrameIntervalNs / 2;
-        }
+        currentRealFrameIntervalNs = NANOS_PER_SECOND / targetFPS;
+        currentTargetFrameIntervalNs = currentRealFrameIntervalNs / 2;
 
         currentTargetFrameIntervalNs = Math.max(MIN_FRAME_INTERVAL_NS,
                 Math.min(currentTargetFrameIntervalNs, currentRealFrameIntervalNs));
@@ -262,6 +257,14 @@ public class FrameGenerationEffect extends Effect {
         }
 
         return currentDisplayFrameType;
+    }
+
+    public synchronized void updateFPS(int fps) {
+        if (fps < 1)
+            return;
+
+        this.targetFPS = fps;
+        updateFrameIntervals();
     }
 
     public void setTargetFPS(int fps) {
