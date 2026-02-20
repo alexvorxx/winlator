@@ -5,6 +5,8 @@ package com.winlator.xenvironment.components;
 */
 
 import androidx.annotation.Keep;
+
+import com.winlator.XServerDisplayActivity;
 import com.winlator.contentdialog.VortekConfigDialog;
 import com.winlator.core.KeyValueSet;
 import com.winlator.renderer.GPUImage;
@@ -31,6 +33,8 @@ public class VortekRendererComponent extends EnvironmentComponent implements Con
   private final Options options;
   
   private final UnixSocketConfig socketConfig;
+
+  private final XServerDisplayActivity activity;
   
   private final XServer xServer;
 
@@ -43,6 +47,11 @@ public class VortekRendererComponent extends EnvironmentComponent implements Con
   }*/
 
   public VortekRendererComponent(XServer paramXServer, UnixSocketConfig paramUnixSocketConfig, Options paramOptions, String paramRenderName) {
+    this(null, paramXServer, paramUnixSocketConfig, paramOptions, paramRenderName);
+  }
+
+  public VortekRendererComponent(XServerDisplayActivity activity, XServer paramXServer, UnixSocketConfig paramUnixSocketConfig, Options paramOptions, String paramRenderName) {
+    this.activity = activity;
     this.xServer = paramXServer;
     this.socketConfig = paramUnixSocketConfig;
     this.options = paramOptions;
@@ -112,10 +121,21 @@ public class VortekRendererComponent extends EnvironmentComponent implements Con
     Window window = this.xServer.windowManager.getWindow(paramInt);
     if (window != null) {
       Drawable drawable = window.getContent();
+      changeFrameRatingVisibility(window);
       synchronized (drawable.renderLock) {
         drawable.forceUpdate();
       } 
     } 
+  }
+
+  private void changeFrameRatingVisibility(Window window) {
+    if (activity != null) {
+      if (activity.frameRating != null) {
+        if (activity.frameRatingWindowId == -1 && window.attributes.isMapped()) {
+          activity.frameRatingWindowId = window.id;
+        }
+      }
+    }
   }
   
   public void handleConnectionShutdown(Client paramClient) {

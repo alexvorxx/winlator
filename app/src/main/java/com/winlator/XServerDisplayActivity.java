@@ -122,7 +122,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private XServer xServer;
     private InputControlsManager inputControlsManager;
     private ImageFs imageFs;
-    private FrameRating frameRating;
+    public FrameRating frameRating;
     private Runnable editInputControlsCallback;
     private Shortcut shortcut;
     private String graphicsDriver = Container.DEFAULT_GRAPHICS_DRIVER;
@@ -141,7 +141,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private DebugDialog debugDialog;
     private short taskAffinityMask = 0;
     private short taskAffinityMaskWoW64 = 0;
-    private int frameRatingWindowId = -1;
+    public int frameRatingWindowId = -1;
     private ContentsManager contentsManager;
     private boolean navigationFocused = false;
     private MidiHandler midiHandler;
@@ -722,7 +722,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 renderName = "vortekrenderer-d";
             else if (options.renderVersion == 2)
                 renderName = "vortekrenderer-110";
-            environment.addComponent(new VortekRendererComponent(xServer, UnixSocketConfig.createSocket(rootPath, UnixSocketConfig.VORTEK_SERVER_PATH), options, renderName));
+            environment.addComponent(new VortekRendererComponent(this, xServer, UnixSocketConfig.createSocket(rootPath, UnixSocketConfig.VORTEK_SERVER_PATH), options, renderName));
         }
 
         RCManager manager = new RCManager(this);
