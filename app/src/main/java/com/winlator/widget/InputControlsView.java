@@ -82,7 +82,7 @@ public class InputControlsView extends View {
         setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
-        if (preferences.getBoolean("haptics", true)) {
+        if (preferences.getBoolean("haptics", false)) {
             vibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
             effect = VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE);
         } else {

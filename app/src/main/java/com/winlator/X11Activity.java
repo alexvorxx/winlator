@@ -1026,7 +1026,7 @@ public class X11Activity extends AppCompatActivity implements View.OnApplyWindow
             rootView.addView(frameRating);
         }
 
-        boolean simTouchScreenMain = preferences.getBoolean("simTouchScreen", true);
+        boolean simTouchScreenMain = preferences.getBoolean("simTouchScreen", false);
         touchpadView.setSimTouchScreen(simTouchScreenMain);
 
         if (shortcut != null) {

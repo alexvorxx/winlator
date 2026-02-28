@@ -787,7 +787,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             rootView.addView(frameRating);
         }
 
-        boolean simTouchScreenMain = preferences.getBoolean("simTouchScreen", true);
+        boolean simTouchScreenMain = preferences.getBoolean("simTouchScreen", false);
         touchpadView.setSimTouchScreen(simTouchScreenMain);
 
         if (shortcut != null) {
