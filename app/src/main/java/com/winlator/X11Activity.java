@@ -66,6 +66,7 @@ import com.winlator.contentdialog.ContentDialog;
 import com.winlator.contentdialog.DXVK_VKD3DConfigDialog;
 import com.winlator.contentdialog.DebugDialog;
 import com.winlator.contentdialog.NavigationDialog;
+import com.winlator.contentdialog.TurnipConfigDialog;
 import com.winlator.contentdialog.VirGLConfigDialog;
 import com.winlator.contents.ContentProfile;
 import com.winlator.contents.ContentsManager;
@@ -344,6 +345,9 @@ public class X11Activity extends AppCompatActivity implements View.OnApplyWindow
 
             if (dxwrapper.contains("dxvk") || dxwrapper.contains("vkd3d") || dxwrapper.contains("wined3d"))
                 this.dxwrapperConfig = DXVK_VKD3DConfigDialog.parseConfig(dxwrapperConfig);
+
+            if (graphicsDriver.contains("turnip"))
+                this.graphicsDriverConfig = TurnipConfigDialog.parseConfig(this, graphicsDriverConfig);
 
             if (!wineInfo.isWin64()) {
                 onExtractFileListener = (file, size) -> {
@@ -1295,10 +1299,16 @@ public class X11Activity extends AppCompatActivity implements View.OnApplyWindow
         String cacheOldVirGL = container.getExtra("useOldVirGL", "false");
         int cacheVortekRenderVersion = Integer.parseInt(container.getExtra("vortek_render_version", "0"));
 
+        if (graphicsDriver.startsWith("turnip"))
+            graphicsDriver += "-"+graphicsDriverConfig.get("version", DefaultVersion.TURNIP);
+        else if (graphicsDriver.startsWith("virgl"))
+            graphicsDriver += "-"+graphicsDriverConfig.get("version", DefaultVersion.VIRGL);
+
         VortekRendererComponent.Options vortekOptions = VortekRendererComponent.Options.fromKeyValueSet(this.graphicsDriverConfig);
 
         boolean changed = (!cacheDriverId.equals(graphicsDriver)) || (cacheContainerId != container.id) ||
                 (!cacheOldVirGL.equals(String.valueOf(useOldVirGL))) || (cacheVortekRenderVersion != vortekOptions.renderVersion);
+
         File rootDir = imageFs.getRootDir();
 
         if (changed) {
@@ -1317,9 +1327,9 @@ public class X11Activity extends AppCompatActivity implements View.OnApplyWindow
             if (dxwrapper.contains("dxvk") || dxwrapper.contains("vkd3d"))
                 DXVK_VKD3DConfigDialog.setEnvVars(this, dxwrapperConfig, envVars);
 
+            TurnipConfigDialog.setEnvVars(graphicsDriverConfig, envVars);
+
             envVars.put("GALLIUM_DRIVER", "zink");
-            envVars.put("TU_OVERRIDE_HEAP_SIZE", "4096");
-            if (!envVars.has("MESA_VK_WSI_PRESENT_MODE")) envVars.put("MESA_VK_WSI_PRESENT_MODE", "mailbox");
             envVars.put("vblank_mode", "0");
 
             if (!GPUInformation.isAdreno6xx(this)) {
@@ -1340,7 +1350,7 @@ public class X11Activity extends AppCompatActivity implements View.OnApplyWindow
                 if (profile != null) {
                     contentsManager.applyContent(profile);
                 } else {
-                    TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/turnip-" + DefaultVersion.TURNIP + ".tzst", rootDir);
+                    TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/turnip-" + graphicsDriverConfig.get("version", DefaultVersion.TURNIP) + ".tzst", rootDir);
                     TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/zink-" + DefaultVersion.ZINK + ".tzst", rootDir);
                 }
             }
@@ -1357,7 +1367,7 @@ public class X11Activity extends AppCompatActivity implements View.OnApplyWindow
                     contentsManager.applyContent(profile);
                 else {
                     if (!useOldVirGL)
-                        TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/virgl-" + DefaultVersion.VIRGL + ".tzst", rootDir);
+                        TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/virgl-" + graphicsDriverConfig.get("version", DefaultVersion.VIRGL) + ".tzst", rootDir);
                     else
                         TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/virgl-old-" + DefaultVersion.VIRGL + ".tzst", rootDir);
                 }

@@ -178,18 +178,18 @@
     <string name="preset">Предустановка</string>
     <string name="you_cannot_remove_this_preset">Вы не можете удалить эту предустановку</string>
     <string name="dxwrapper_help_content" translatable="false"><![CDATA[
-        <i><b>WineD3D</b></i> представляет собой слой трансляции DirectX 1-11 в OpenGL.<br /><br />
-        <i><b>DXVK</b></i> представляет собой слой трансляции Direct3D 8-11 в Vulkan.<br /><br />
-        <i><b>VKD3D</b></i> представляет собой слой трансляции Direct3D 12 API в Vulkan.<br /><br />
-        <i><b>dgVoodoo</b></i> представляет собой реализацию графических API (DirectX 1-9 и т.п.) для лучшей совместимости с классическими играми.<br /><br />
-        <i><b>CNC DDraw</b></i> представляет собой реализацию DirectDraw для лучшей совместимости с классическими играми.
+        <i><b>WineD3D</b></i> - слой трансляции DirectX 1-11 в OpenGL.<br /><br />
+        <i><b>DXVK</b></i> - слой трансляции Direct3D 8-11 в Vulkan.<br /><br />
+        <i><b>VKD3D</b></i> - слой трансляции Direct3D 12 API в Vulkan.<br /><br />
+        <i><b>dgVoodoo</b></i> - реализация графических API (DirectX 1-9 и т.п.) для лучшей совместимости с классическими играми.<br /><br />
+        <i><b>CNC DDraw</b></i> - реализация DirectDraw для лучшей совместимости с классическими играми.
     ]]></string>
     <string name="graphics_driver_help_content" translatable="false"><![CDATA[
-        <i><b>Turnip</b></i> представляет собой драйвер Mesa Vulkan (только для Adreno 6xx, 7xx).<br /><br />
-        <i><b>VirGL</b></i> представляет собой виртуальный драйвер OpenGL (для всех GPU).<br /><br />
-        <i><b>Vortek</b></i> представляет собой драйвер Vulkan, специально разработанный <i>Bruno</i> для Winlator (для большинства Mali и Adreno).<br /><br />
-        <i><b>Freedreno</b></i> представляет собой драйвер Mesa OpenGL (только для Adreno).<br /><br />
-        <i><b>LLVMPipe</b></i> представляет собой программный (CPU) драйвер Mesa Vulkan и OpenGL (универсальный, медленный).<br /><br />
+        <i><b>Turnip</b></i> - драйвер Mesa Vulkan (только для Adreno 6xx, 7xx).<br /><br />
+        <i><b>VirGL</b></i> - виртуальный драйвер OpenGL (для всех GPU). Версия <i>Old</i> медленнее, но более совместимая.<br /><br />
+        <i><b>Vortek</b></i> - драйвер Vulkan, специально разработанный <i>Bruno</i> для Winlator (для большинства Mali и Adreno).<br /><br />
+        <i><b>Freedreno</b></i> - драйвер Mesa OpenGL (только для Adreno).<br /><br />
+        <i><b>LLVMPipe</b></i> - программный (CPU) драйвер Mesa Vulkan и OpenGL (универсальный, медленный).<br /><br />
         <i>ПРИМЕЧАНИЕ:</i> При выборе драйвера Turnip или Vortek автоматически устанавливается Mesa <i><b>Zink</b></i> (слой трансляции OpenGL в Vulkan).<br /><br />
     ]]></string>
     <string name="box86_64_env_var_help__dynarec_safeflags" translatable="false"><![CDATA[
@@ -234,6 +234,7 @@
     <string name="system_font">Системный шрифт</string>
     <string name="dpi">DPI (Размер шрифта)</string>
     <string name="max_device_memory">Максимальный объем памяти</string>
+    <string name="present_mode">Режим отображения</string>
     <string name="frame_rate">Частота кадров</string>
     <string name="configuration">Конфигурация</string>
     <string name="browse">Просмотреть</string>

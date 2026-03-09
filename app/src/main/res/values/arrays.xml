@@ -16,8 +16,8 @@
         <item>1920x1080 (16:9)</item>
     </string-array>
     <string-array name="graphics_driver_entries">
-        <item>Turnip-24.1.0</item>
-        <item>VirGL-23.1.9</item>
+        <item>Turnip</item>
+        <item>VirGL</item>
         <item>Vortek-2.0/2.1</item>
         <item>Freedreno-26.0.0</item>
         <item>LLVMPipe-25.0.0</item>
@@ -101,6 +101,8 @@
         <item>1024 MB</item>
         <item>2048 MB</item>
         <item>4096 MB</item>
+        <item>8192 MB</item>
+        <item>16384 MB</item>
         <item>0 (No limit)</item>
     </string-array>
     <string-array name="image_cache_size_entries">
@@ -120,6 +122,19 @@
         <item>10.1 (Hotfix)</item>
         <item>Debug (11.07.25)</item>
         <item>11.0</item>
+    </string-array>
+    <string-array name="turnip_version_entries">
+        <item>24.1.0</item>
+    </string-array>
+    <string-array name="virgl_version_entries">
+        <item>23.1.9</item>
+        <item>23.1.9-old</item>
+    </string-array>
+    <string-array name="present_mode_entries">
+        <item>immediate</item>
+        <item>mailbox</item>
+        <item>fifo</item>
+        <item>relaxed</item>
     </string-array>
     <string-array name="wincomponent_entries">
         <item>Builtin (Wine)</item>

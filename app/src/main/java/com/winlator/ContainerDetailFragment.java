@@ -37,6 +37,7 @@ import com.winlator.container.ContainerManager;
 import com.winlator.contentdialog.AddEnvVarDialog;
 import com.winlator.contentdialog.ContentDialog;
 import com.winlator.contentdialog.DXVK_VKD3DConfigDialog;
+import com.winlator.contentdialog.TurnipConfigDialog;
 import com.winlator.contentdialog.VirGLConfigDialog;
 import com.winlator.contentdialog.VortekConfigDialog;
 import com.winlator.contentdialog.WineD3DConfigDialog;
@@ -547,9 +548,12 @@ public class ContainerDetailFragment extends Fragment {
         sGraphicsDriver.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                ///
                 String graphicsDriver = StringUtils.parseIdentifier(sGraphicsDriver.getSelectedItem());
-                if (graphicsDriver.startsWith("vortek")) {
+                if (graphicsDriver.startsWith("turnip")) {
+                    vGraphicsDriverConfig.setOnClickListener((v) -> (new TurnipConfigDialog(vGraphicsDriverConfig)).show());
+                    vGraphicsDriverConfig.setVisibility(View.VISIBLE);
+                }
+                else if (graphicsDriver.startsWith("vortek")) {
                     vGraphicsDriverConfig.setOnClickListener((v) -> (new VortekConfigDialog(vGraphicsDriverConfig)).show());
                     vGraphicsDriverConfig.setVisibility(View.VISIBLE);
                 } else if (graphicsDriver.startsWith("virgl")) {
@@ -718,10 +722,6 @@ public class ContainerDetailFragment extends Fragment {
     public static void updateGraphicsDriverSpinner(Context context, ContentsManager manager, Spinner spinner) {
         String[] originalItems = context.getResources().getStringArray(R.array.graphics_driver_entries);
         List<String> itemList = new ArrayList<>(Arrays.asList(originalItems));
-        for (ContentProfile profile : manager.getProfiles(ContentProfile.ContentType.CONTENT_TYPE_TURNIP))
-            itemList.add(ContentsManager.getEntryName(profile));
-        for (ContentProfile profile : manager.getProfiles(ContentProfile.ContentType.CONTENT_TYPE_VIRGL))
-            itemList.add(ContentsManager.getEntryName(profile));
         spinner.setAdapter(new ArrayAdapter<>(context, android.R.layout.simple_spinner_dropdown_item, itemList));
     }
 
