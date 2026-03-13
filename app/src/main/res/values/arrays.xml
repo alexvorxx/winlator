@@ -20,7 +20,7 @@
         <item>VirGL</item>
         <item>Vortek-2.0/2.1</item>
         <item>Freedreno-26.0.0</item>
-        <item>LLVMPipe-25.0.0</item>
+        <item>LLVMPipe-26.0.0</item>
     </string-array>
     <string-array name="audio_driver_entries">
         <item>ALSA</item>
