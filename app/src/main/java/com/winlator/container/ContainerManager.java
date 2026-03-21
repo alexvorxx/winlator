@@ -151,6 +151,7 @@ public class ContainerManager {
         dstContainer.setShowFPS(srcContainer.isShowFPS());
         dstContainer.setWoW64Mode(srcContainer.isWoW64Mode());
         dstContainer.setStartupSelection(srcContainer.getStartupSelection());
+        dstContainer.setBox64Version(srcContainer.getBox64Version());
         dstContainer.setBox86Preset(srcContainer.getBox86Preset());
         dstContainer.setBox64Preset(srcContainer.getBox64Preset());
         dstContainer.setDesktopTheme(srcContainer.getDesktopTheme());

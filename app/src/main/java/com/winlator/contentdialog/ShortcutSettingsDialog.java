@@ -13,12 +13,14 @@ import android.widget.Spinner;
 
 import com.winlator.ContainerDetailFragment;
 import com.winlator.R;
+import com.winlator.SettingsFragment;
 import com.winlator.ShortcutsFragment;
 import com.winlator.box86_64.Box86_64PresetManager;
 import com.winlator.box86_64.rc.RCManager;
 import com.winlator.container.Shortcut;
 import com.winlator.contents.ContentsManager;
 import com.winlator.core.AppUtils;
+import com.winlator.core.DefaultVersion;
 import com.winlator.core.EnvVars;
 import com.winlator.core.StringUtils;
 import com.winlator.inputcontrols.ControlsProfile;
@@ -152,6 +154,11 @@ public class ShortcutSettingsDialog extends ContentDialog {
         final View btHelpWoW64Mode = findViewById(R.id.WoW64ModeHelp);
         btHelpWoW64Mode.setOnClickListener(v -> AppUtils.showHelpBox(context, v, R.string.help_wow64_mode));
 
+        final Spinner sBox64Version = findViewById(R.id.SBox64Version);
+        SettingsFragment.loadBox64VersionSpinner(context, contentsManager, sBox64Version);
+
+        AppUtils.setSpinnerSelectionFromIdentifier(sBox64Version, shortcut.getExtra("box64Version", shortcut.container.getBox64Version()));
+
         final Spinner sBox86Preset = findViewById(R.id.SBox86Preset);
         Box86_64PresetManager.loadSpinner("box86", sBox86Preset, shortcut.getExtra("box86Preset", shortcut.container.getBox86Preset()));
 
@@ -196,7 +203,7 @@ public class ShortcutSettingsDialog extends ContentDialog {
             }
             else {
                 String graphicsDriver = StringUtils.parseIdentifier(sGraphicsDriver.getSelectedItem());
-                String graphicsDriverConfig = vGraphicsDriverConfig.getTag().toString(); ///
+                String graphicsDriverConfig = vGraphicsDriverConfig.getTag().toString();
                 String dxwrapper = StringUtils.parseIdentifier(sDXWrapper.getSelectedItem());
                 String dxwrapperConfig = vDXWrapperConfig.getTag().toString();
                 String audioDriver = StringUtils.parseIdentifier(sAudioDriver.getSelectedItem());
@@ -214,7 +221,7 @@ public class ShortcutSettingsDialog extends ContentDialog {
 
                 updateExtra("screenSize", shortcut.container.getScreenSize(), screenSize);
                 updateExtra("graphicsDriver", shortcut.container.getGraphicsDriver(), graphicsDriver);
-                updateExtra("graphicsDriverConfig", shortcut.container.getGraphicsDriverConfig(), graphicsDriverConfig); ///
+                updateExtra("graphicsDriverConfig", shortcut.container.getGraphicsDriverConfig(), graphicsDriverConfig);
                 updateExtra("dxwrapper", shortcut.container.getDXWrapper(), dxwrapper);
                 updateExtra("dxwrapperConfig", shortcut.container.getDXWrapperConfig(), dxwrapperConfig);
                 updateExtra("audioDriver", shortcut.container.getAudioDriver(), audioDriver);
@@ -240,8 +247,10 @@ public class ShortcutSettingsDialog extends ContentDialog {
                 String envVars = envVarsView.getEnvVars();
                 shortcut.putExtra("envVars", !envVars.isEmpty() ? envVars : null);
 
+                String box64Version = StringUtils.parseIdentifier(sBox64Version.getSelectedItem());
                 String box86Preset = Box86_64PresetManager.getSpinnerSelectedId(sBox86Preset);
                 String box64Preset = Box86_64PresetManager.getSpinnerSelectedId(sBox64Preset);
+                updateExtra("box64Version", shortcut.container.getBox64Version(), box64Version);
                 updateExtra("box86Preset", shortcut.container.getBox86Preset(), box86Preset);
                 updateExtra("box64Preset", shortcut.container.getBox64Preset(), box64Preset);
 

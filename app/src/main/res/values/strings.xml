@@ -142,6 +142,7 @@
     <string name="estimated_used_space">Estimated Used Space</string>
     <string name="advanced">Advanced</string>
     <string name="box86_box64" translatable="false">Box86/Box64</string>
+    <string name="box64" translatable="false">Box64</string>
     <string name="system">System</string>
     <string name="box86_preset">Box86 Preset</string>
     <string name="box64_preset">Box64 Preset</string>

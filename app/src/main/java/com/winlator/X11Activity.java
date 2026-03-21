@@ -1487,6 +1487,7 @@ public class X11Activity extends AppCompatActivity implements View.OnApplyWindow
             ArrayList<String> bindingPaths = new ArrayList<>();
             for (String[] drive : container.drivesIterator()) bindingPaths.add(drive[1]);
             guestProgramLauncherComponent.setBindingPaths(bindingPaths.toArray(new String[0]));
+            guestProgramLauncherComponent.setBox64Version(shortcut != null ? shortcut.getExtra("box64Version", container.getBox64Version()) : container.getBox64Version());
             guestProgramLauncherComponent.setBox86Preset(shortcut != null ? shortcut.getExtra("box86Preset", container.getBox86Preset()) : container.getBox86Preset());
             guestProgramLauncherComponent.setBox64Preset(shortcut != null ? shortcut.getExtra("box64Preset", container.getBox64Preset()) : container.getBox64Preset());
         }

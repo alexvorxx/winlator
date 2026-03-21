@@ -45,6 +45,7 @@ import com.winlator.contents.ContentProfile;
 import com.winlator.contents.ContentsManager;
 import com.winlator.core.AppUtils;
 import com.winlator.core.Callback;
+import com.winlator.core.DefaultVersion;
 import com.winlator.core.EnvVars;
 import com.winlator.core.FileUtils;
 import com.winlator.core.KeyValueSet;
@@ -62,6 +63,7 @@ import com.winlator.widget.ImagePickerView;
 import com.winlator.win32.MSLogFont;
 import com.winlator.winhandler.WinHandler;
 import com.winlator.xserver.XKeycode;
+import com.winlator.SettingsFragment;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -228,6 +230,11 @@ public class ContainerDetailFragment extends Fragment {
         byte previousStartupSelection = isEditMode() ? container.getStartupSelection() : -1;
         sStartupSelection.setSelection(previousStartupSelection != -1 ? previousStartupSelection : Container.STARTUP_SELECTION_ESSENTIAL);
 
+        final Spinner sBox64Version = view.findViewById(R.id.SBox64Version);
+        SettingsFragment.loadBox64VersionSpinner(context, contentsManager, sBox64Version);
+
+        AppUtils.setSpinnerSelectionFromIdentifier(sBox64Version, isEditMode() ? container.getBox64Version() : DefaultVersion.BOX64);
+
         final Spinner sBox86Preset = view.findViewById(R.id.SBox86Preset);
         Box86_64PresetManager.loadSpinner("box86", sBox86Preset, isEditMode() ? container.getBox86Preset() : preferences.getString("box86_preset", Box86_64Preset.COMPATIBILITY));
 
@@ -273,7 +280,7 @@ public class ContainerDetailFragment extends Fragment {
                 String screenSize = getScreenSize(view);
                 String envVars = envVarsView.getEnvVars();
                 String graphicsDriver = StringUtils.parseIdentifier(sGraphicsDriver.getSelectedItem());
-                String graphicsDriverConfig = vGraphicsDriverConfig.getTag().toString(); ///
+                String graphicsDriverConfig = vGraphicsDriverConfig.getTag().toString();
                 String dxwrapper = StringUtils.parseIdentifier(sDXWrapper.getSelectedItem());
                 String dxwrapperConfig = vDXWrapperConfig.getTag().toString();
                 String audioDriver = StringUtils.parseIdentifier(sAudioDriver.getSelectedItem());
@@ -286,6 +293,7 @@ public class ContainerDetailFragment extends Fragment {
                 String cpuListWoW64 = cpuListViewWoW64.getCheckedCPUListAsString();
                 boolean wow64Mode = cbWoW64Mode.isChecked() /* && cbWoW64Mode.isEnabled() */ ;
                 byte startupSelection = (byte)sStartupSelection.getSelectedItemPosition();
+                String box64Version = StringUtils.parseIdentifier(sBox64Version.getSelectedItem());
                 String box86Preset = Box86_64PresetManager.getSpinnerSelectedId(sBox86Preset);
                 String box64Preset = Box86_64PresetManager.getSpinnerSelectedId(sBox64Preset);
                 String desktopTheme = getDesktopTheme(view);
@@ -308,7 +316,7 @@ public class ContainerDetailFragment extends Fragment {
                     container.setGraphicsDriver(graphicsDriver);
                     container.setDXWrapper(dxwrapper);
                     container.setDXWrapperConfig(dxwrapperConfig);
-                    container.setGraphicsDriverConfig(graphicsDriverConfig); ///
+                    container.setGraphicsDriverConfig(graphicsDriverConfig);
                     container.setAudioDriver(audioDriver);
                     container.setWinComponents(wincomponents);
                     container.setDrives(drives);
@@ -316,6 +324,7 @@ public class ContainerDetailFragment extends Fragment {
                     container.setInputType(finalInputType);
                     container.setWoW64Mode(wow64Mode);
                     container.setStartupSelection(startupSelection);
+                    container.setBox64Version(box64Version);
                     container.setBox86Preset(box86Preset);
                     container.setBox64Preset(box64Preset);
                     container.setDesktopTheme(desktopTheme);
@@ -337,7 +346,7 @@ public class ContainerDetailFragment extends Fragment {
                     data.put("cpuList", cpuList);
                     data.put("cpuListWoW64", cpuListWoW64);
                     data.put("graphicsDriver", graphicsDriver);
-                    data.put("graphicsDriverConfig", graphicsDriverConfig); ///
+                    data.put("graphicsDriverConfig", graphicsDriverConfig);
                     data.put("dxwrapper", dxwrapper);
                     data.put("dxwrapperConfig", dxwrapperConfig);
                     data.put("audioDriver", audioDriver);
@@ -347,6 +356,7 @@ public class ContainerDetailFragment extends Fragment {
                     data.put("inputType", finalInputType);
                     data.put("wow64Mode", wow64Mode);
                     data.put("startupSelection", startupSelection);
+                    data.put("box64Version", box64Version);
                     data.put("box86Preset", box86Preset);
                     data.put("box64Preset", box64Preset);
                     data.put("desktopTheme", desktopTheme);

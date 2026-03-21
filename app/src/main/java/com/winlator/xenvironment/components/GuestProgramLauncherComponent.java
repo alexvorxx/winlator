@@ -26,6 +26,7 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
     private EnvVars envVars;
     private String box86Preset = Box86_64Preset.COMPATIBILITY;
     private String box64Preset = Box86_64Preset.COMPATIBILITY;
+    private String box64Version = DefaultVersion.BOX64;
     private Callback<Integer> terminationCallback;
     private static final Object lock = new Object();
     private boolean wow64Mode = true;
@@ -105,6 +106,14 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
         this.box64Preset = box64Preset;
     }
 
+    public String getBox64Version() {
+        return box64Version;
+    }
+
+    public void setBox64Version(String box64Version) {
+        this.box64Version = box64Version;
+    }
+
     private int execGuestProgram() {
         Context context = environment.getContext();
         ImageFs imageFs = environment.getImageFs();
@@ -172,7 +181,7 @@ public class GuestProgramLauncherComponent extends EnvironmentComponent {
         Context context = environment.getContext();
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
         String box86Version = preferences.getString("box86_version", DefaultVersion.BOX86);
-        String box64Version = preferences.getString("box64_version", DefaultVersion.BOX64);
+        //String box64Version = preferences.getString("box64_version", DefaultVersion.BOX64);
         String currentBox86Version = preferences.getString("current_box86_version", "");
         String currentBox64Version = preferences.getString("current_box64_version", "");
         File rootDir = imageFs.getRootDir();

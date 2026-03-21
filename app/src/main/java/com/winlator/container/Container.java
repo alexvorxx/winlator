@@ -4,6 +4,7 @@ import android.os.Environment;
 
 import com.winlator.XrActivity;
 import com.winlator.box86_64.Box86_64Preset;
+import com.winlator.core.DefaultVersion;
 import com.winlator.core.EnvVars;
 import com.winlator.core.FileUtils;
 import com.winlator.core.KeyValueSet;
@@ -41,7 +42,7 @@ public class Container {
     private String screenSize = DEFAULT_SCREEN_SIZE;
     private String envVars = DEFAULT_ENV_VARS;
     private String graphicsDriver = DEFAULT_GRAPHICS_DRIVER;
-    private String graphicsDriverConfig = ""; ///
+    private String graphicsDriverConfig = "";
     private String dxwrapper = DEFAULT_DXWRAPPER;
     private String dxwrapperConfig = "";
     private String wincomponents = DEFAULT_WINCOMPONENTS;
@@ -56,6 +57,7 @@ public class Container {
     private String desktopTheme = WineThemeManager.DEFAULT_DESKTOP_THEME;
     private String box86Preset = Box86_64Preset.COMPATIBILITY;
     private String box64Preset = Box86_64Preset.COMPATIBILITY;
+    private String box64Version = DefaultVersion.BOX64;
     private File rootDir;
     private JSONObject extraData;
     private int rcfileId = 0;
@@ -99,12 +101,10 @@ public class Container {
         return graphicsDriver;
     }
 
-    ///
     public String getGraphicsDriverConfig() {
         return this.graphicsDriverConfig;
     }
 
-    ///
     public void setGraphicsDriverConfig(String graphicsDriverConfig) {
         if (graphicsDriverConfig == null)
             graphicsDriverConfig = "";
@@ -243,6 +243,14 @@ public class Container {
         this.box64Preset = box64Preset;
     }
 
+    public String getBox64Version() {
+        return box64Version;
+    }
+
+    public void setBox64Version(String box64Version) {
+        this.box64Version = box64Version;
+    }
+
     public File getRootDir() {
         return rootDir;
     }
@@ -377,7 +385,7 @@ public class Container {
             data.put("graphicsDriver", graphicsDriver);
             data.put("dxwrapper", dxwrapper);
             if (!dxwrapperConfig.isEmpty()) data.put("dxwrapperConfig", dxwrapperConfig);
-            if (!graphicsDriverConfig.isEmpty()) data.put("graphicsDriverConfig", graphicsDriverConfig); ///
+            if (!graphicsDriverConfig.isEmpty()) data.put("graphicsDriverConfig", graphicsDriverConfig);
             data.put("audioDriver", audioDriver);
             data.put("wincomponents", wincomponents);
             data.put("drives", drives);
@@ -385,6 +393,7 @@ public class Container {
             data.put("inputType", inputType);
             data.put("wow64Mode", wow64Mode);
             data.put("startupSelection", startupSelection);
+            data.put("box64Version", box64Version);
             data.put("box86Preset", box86Preset);
             data.put("box64Preset", box64Preset);
             data.put("desktopTheme", desktopTheme);
@@ -405,7 +414,7 @@ public class Container {
     public void loadData(JSONObject data) throws JSONException {
         wineVersion = WineInfo.MAIN_WINE_VERSION.identifier();
         dxwrapperConfig = "";
-        graphicsDriverConfig = ""; ///
+        graphicsDriverConfig = "";
         checkObsoleteOrMissingProperties(data);
 
         for (Iterator<String> it = data.keys(); it.hasNext(); ) {
@@ -438,7 +447,6 @@ public class Container {
                 case "dxwrapperConfig" :
                     setDXWrapperConfig(data.getString(key));
                     break;
-                ///
                 case "graphicsDriverConfig" :
                     setGraphicsDriverConfig(data.getString(key));
                     break;
@@ -465,6 +473,9 @@ public class Container {
                 }
                 case "wineVersion" :
                     setWineVersion(data.getString(key));
+                    break;
+                case "box64Version" :
+                    setBox64Version(data.getString(key));
                     break;
                 case "box86Preset" :
                     setBox86Preset(data.getString(key));
