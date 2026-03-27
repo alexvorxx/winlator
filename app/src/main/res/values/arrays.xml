@@ -40,9 +40,8 @@
         <item>0.96</item>
         <item>1.5.5</item>
         <item>1.7.3-stripped</item>
-        <item>1.10.6-sarek-async</item>
-        <item>1.10.1-async</item>
         <item>1.10.3-async</item>
+        <item>1.10.6-sarek-async</item>
         <item>2.0-async</item>
         <item>2.4-gplasync</item>
     </string-array>
@@ -120,8 +119,10 @@
     </string-array>
     <string-array name="vortek_render_version_entries">
         <item>10.1 (Hotfix)</item>
-        <item>Debug (11.07.25)</item>
         <item>11.0</item>
+    </string-array>
+    <string-array name="vortek_driver_version_entries" >
+        <item>System</item>
     </string-array>
     <string-array name="turnip_version_entries">
         <item>24.1.0</item>

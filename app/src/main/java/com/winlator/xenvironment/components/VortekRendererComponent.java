@@ -8,6 +8,7 @@ import androidx.annotation.Keep;
 
 import com.winlator.XServerDisplayActivity;
 import com.winlator.contentdialog.VortekConfigDialog;
+import com.winlator.contents.AdrenotoolsManager;
 import com.winlator.core.KeyValueSet;
 import com.winlator.renderer.GPUImage;
 import com.winlator.renderer.Texture;
@@ -46,25 +47,24 @@ public class VortekRendererComponent extends EnvironmentComponent implements Con
     System.loadLibrary("vortekrenderer");
   }*/
 
-  public VortekRendererComponent(XServer paramXServer, UnixSocketConfig paramUnixSocketConfig, Options paramOptions, String paramRenderName) {
-    this(null, paramXServer, paramUnixSocketConfig, paramOptions, paramRenderName);
+  public VortekRendererComponent(XServer xServer, UnixSocketConfig unixSocketConfig, Options options, String renderName) {
+    this(null, xServer, unixSocketConfig, options, renderName);
   }
 
-  public VortekRendererComponent(XServerDisplayActivity activity, XServer paramXServer, UnixSocketConfig paramUnixSocketConfig, Options paramOptions, String paramRenderName) {
+  public VortekRendererComponent(XServerDisplayActivity activity, XServer xServer, UnixSocketConfig unixSocketConfig, Options options, String renderName) {
     this.activity = activity;
-    this.xServer = paramXServer;
-    this.socketConfig = paramUnixSocketConfig;
-    this.options = paramOptions;
-    this.renderName = paramRenderName;
+    this.xServer = xServer;
+    this.socketConfig = unixSocketConfig;
+    this.options = options;
+    this.renderName = renderName;
     System.loadLibrary(this.renderName);
-    if (renderName.equals("vortekrenderer-110"))
+    if (this.renderName.equals("vortekrenderer-110"))
       this.format = true;
     else
       this.format = false;
 
-    if (!(renderName.equals("vortekrenderer-d"))) {
-      initVulkanWrapper(null, paramOptions.libvulkanPath);
-    }
+    String nativeLibraryDir = activity.getBaseContext().getApplicationInfo().nativeLibraryDir;
+    initVulkanWrapper(nativeLibraryDir, options.libvulkanPath);
   }
 
   private native long createVkContext(int paramInt, Options paramOptions);
@@ -195,24 +195,30 @@ public class VortekRendererComponent extends EnvironmentComponent implements Con
 
     public short renderVersion = 0;
     
-    public static Options fromKeyValueSet(KeyValueSet param1KeyValueSet) {
-      if (param1KeyValueSet == null || param1KeyValueSet.isEmpty())
+    public static Options fromKeyValueSet(KeyValueSet keyValueSet) {
+      if (keyValueSet == null || keyValueSet.isEmpty())
         return new Options();
 
       Options options = new Options();
-      String str1 = param1KeyValueSet.get("exposedDeviceExtensions", "all");
+      String str1 = keyValueSet.get("exposedDeviceExtensions", "all");
       if (!str1.isEmpty() && !str1.equals("all"))
         options.exposedDeviceExtensions = str1.split("\\|"); 
       str1 = VortekConfigDialog.DEFAULT_VK_MAX_VERSION;
-      String str2 = param1KeyValueSet.get("vkMaxVersion", str1);
+      String str2 = keyValueSet.get("vkMaxVersion", str1);
       if (!str2.equals(str1)) {
         String[] arrayOfString = str2.split("\\.");
         options.vkMaxVersion = vkMakeVersion(Integer.parseInt(arrayOfString[0]), Integer.parseInt(arrayOfString[1]), 128);
       } 
-      options.maxDeviceMemory = (short)param1KeyValueSet.getInt("maxDeviceMemory", 512);
-      options.imageCacheSize = (short)param1KeyValueSet.getInt("imageCacheSize", 256);
-      options.resourceMemoryType = (byte)param1KeyValueSet.getInt("resourceMemoryType", 0);
-      options.renderVersion = (short)param1KeyValueSet.getInt("renderVersion", 0);
+      options.maxDeviceMemory = (short)keyValueSet.getInt("maxDeviceMemory", 512);
+      options.imageCacheSize = (short)keyValueSet.getInt("imageCacheSize", 256);
+      options.resourceMemoryType = (byte)keyValueSet.getInt("resourceMemoryType", 0);
+      options.renderVersion = (short)keyValueSet.getInt("renderVersion", 0);
+
+      if (keyValueSet.getInt("driverVersion", 0) == 0)
+        options.libvulkanPath = null;
+      else
+        options.libvulkanPath = keyValueSet.get("libraryPath");
+
       return options;
     }
   }

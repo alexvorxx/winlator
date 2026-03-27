@@ -289,6 +289,7 @@
     <string name="image_cache_size" translatable="false">Image Cache Size</string>
     <string name="resource_memory_type" translatable="false">Resource Memory Type</string>
     <string name="vortek_render_version" translatable="false">Render version</string>
+    <string name="vortek_driver_version" translatable="false">Driver version</string>
     <string name="box64_rc_file">Box64 RCFile</string>
     <string name="filter">Filter</string>
     <string name="all">All</string>
@@ -545,4 +546,9 @@ E.g. <b>META</b> for <i>META key</i>, \n
     <string name="target_fps" translatable="false">FPS:</string>
     <string name="current_fps" translatable="false">Current: -- FPS → -- FPS</string>
     <string name="generation_mode" translatable="false">Mode:</string>
+
+    <string name="install_drivers" translatable="false">Install Drivers</string>
+    <string name="install_drivers_message" translatable="false">You will now be prompted to pick a driver. These must be the same ones used in other emulators like Yuzu, Dolphin, Citra, etc.</string>
+    <string name="install_drivers_warning" translatable="false">Be warned that because of limitations of current PC emulators, Qualcomm Drivers may not work on chipsets below 8 Gen2 without getting patched.</string>
+    <string name="adrenotools_gpu_drivers" translatable="false">Adrenotools GPU Drivers</string>
 </resources>

@@ -281,6 +281,7 @@
     <string name="image_cache_size" translatable="false">Размер кэша изображений</string>
     <string name="resource_memory_type" translatable="false">Тип памяти для ресурсов</string>
     <string name="vortek_render_version">Версия рендера</string>
+    <string name="vortek_driver_version">Версия драйвера</string>
     <string name="box64_rc_file">Box64 RCFile</string>
     <string name="filter">Фильтр</string>
     <string name="all">Все</string>
@@ -515,4 +516,9 @@
     <string name="on">ВКЛ</string>
     <string name="target_fps">FPS:</string>
     <string name="generation_mode">Режим:</string>
+
+    <string name="install_drivers">Установить драйвер</string>
+    <string name="install_drivers_message">Сейчас Вам будет предложено выбрать драйвер. Он должен быть таким же, как и в других эмуляторах (Yuzu, Dolphin, Citra, и т.д.).</string>
+    <string name="install_drivers_warning">Имейте в виду, что из-за ограничений современных эмуляторов драйверы Qualcomm могут не работать на чипсетах ниже 8 Gen2 без патчей.</string>
+    <string name="adrenotools_gpu_drivers">Драйверы GPU Adrenotools</string>
 </resources>

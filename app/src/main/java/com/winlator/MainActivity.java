@@ -200,6 +200,9 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
             case R.id.main_menu_contents:
                 show(new ContentsFragment());
                 break;
+            case R.id.main_menu_adrenotools_gpu_drivers:
+                show(new AdrenotoolsFragment());
+                break;
             case R.id.main_menu_settings:
                 show(new SettingsFragment());
                 break;
