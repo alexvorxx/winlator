@@ -725,7 +725,9 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             String renderName = "vortekrenderer-101";
             if (options.renderVersion == 1)
                 renderName = "vortekrenderer-110";
-            environment.addComponent(new VortekRendererComponent(this, xServer, UnixSocketConfig.createSocket(rootPath, UnixSocketConfig.VORTEK_SERVER_PATH), options, renderName));
+            environment.addComponent(new VortekRendererComponent(this, xServer,
+                    UnixSocketConfig.createSocket(rootPath, UnixSocketConfig.VORTEK_SERVER_PATH),
+                    options, renderName, getApplicationInfo().nativeLibraryDir));
         }
 
         RCManager manager = new RCManager(this);

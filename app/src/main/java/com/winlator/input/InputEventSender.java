@@ -227,4 +227,8 @@ public final class InputEventSender {
         // We try to send all other key codes to the host directly.
         return mInjector.sendKeyEvent(scancode, keyCode, pressed);
     }
+
+    public InputStub getInjector() {
+        return mInjector;
+    }
 }

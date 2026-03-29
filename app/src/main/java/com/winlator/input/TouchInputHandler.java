@@ -519,6 +519,10 @@ public class TouchInputHandler {
         return mInjector.sendKeyEvent(e);
     }
 
+    public void sendKeyEvent(int scanCode, int keyCode, boolean keyDown) {
+        mInjector.getInjector().sendKeyEvent(scanCode, keyCode, keyDown);
+    }
+
     public void sendMouseEvent(int button, boolean down, boolean relative) {
         mInjector.sendMouseEvent(null, button, down, relative);
     }

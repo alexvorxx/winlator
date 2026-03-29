@@ -183,7 +183,7 @@ public class X11Activity extends AppCompatActivity implements View.OnApplyWindow
     private short taskAffinityMaskWoW64 = 0;
     private int frameRatingWindowId = -1;
     private float globalCursorSpeed = 1.0f;
-    private static final float MouseWheelDistance = 200.0f;
+    private static final float MouseWheelDistance = 100.0f;
     private static final int inputControlsViewDelay = 1000;
 
     private String graphicsDriver = Container.DEFAULT_GRAPHICS_DRIVER;
@@ -1385,7 +1385,7 @@ public class X11Activity extends AppCompatActivity implements View.OnApplyWindow
             }
 
             if (changed) {
-                if (vortekOptions.renderVersion == 2)
+                if (vortekOptions.renderVersion == 1)
                     TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/vortek-2.1.tzst", rootDir);
                 else
                     TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/vortek-" + DefaultVersion.VORTEK + ".tzst", rootDir);
@@ -1517,12 +1517,12 @@ public class X11Activity extends AppCompatActivity implements View.OnApplyWindow
         }
         else if (graphicsDriver.startsWith("vortek")) {
             VortekRendererComponent.Options options = VortekRendererComponent.Options.fromKeyValueSet(this.graphicsDriverConfig);
-            String renderName = "vortekrenderer";
+            String renderName = "vortekrenderer-101";
             if (options.renderVersion == 1)
-                renderName = "vortekrenderer-d";
-            else if (options.renderVersion == 2)
                 renderName = "vortekrenderer-110";
-            environment.addComponent(new VortekRendererComponent(xServer, UnixSocketConfig.createSocket(rootPath, UnixSocketConfig.VORTEK_SERVER_PATH), options, renderName));
+            environment.addComponent(new VortekRendererComponent(xServer,
+                    UnixSocketConfig.createSocket(rootPath, UnixSocketConfig.VORTEK_SERVER_PATH),
+                    options, renderName, getApplicationInfo().nativeLibraryDir));
         }
 
         RCManager manager = new RCManager(this);
@@ -1672,7 +1672,7 @@ public class X11Activity extends AppCompatActivity implements View.OnApplyWindow
                 e = new KeyEvent(KeyEvent.ACTION_DOWN, buttonMapping.keyCode);
             else
                 e = new KeyEvent(KeyEvent.ACTION_UP, buttonMapping.keyCode);
-            mInputHandler.sendKeyEvent(e);
+            mInputHandler.sendKeyEvent(e.getScanCode(), e.getKeyCode(), isActionDown);
             return true;
         }
         else

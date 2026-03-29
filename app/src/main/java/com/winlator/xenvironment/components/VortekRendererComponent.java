@@ -47,11 +47,11 @@ public class VortekRendererComponent extends EnvironmentComponent implements Con
     System.loadLibrary("vortekrenderer");
   }*/
 
-  public VortekRendererComponent(XServer xServer, UnixSocketConfig unixSocketConfig, Options options, String renderName) {
-    this(null, xServer, unixSocketConfig, options, renderName);
+  public VortekRendererComponent(XServer xServer, UnixSocketConfig unixSocketConfig, Options options, String renderName, String nativeLibraryDir) {
+    this(null, xServer, unixSocketConfig, options, renderName, nativeLibraryDir);
   }
 
-  public VortekRendererComponent(XServerDisplayActivity activity, XServer xServer, UnixSocketConfig unixSocketConfig, Options options, String renderName) {
+  public VortekRendererComponent(XServerDisplayActivity activity, XServer xServer, UnixSocketConfig unixSocketConfig, Options options, String renderName, String nativeLibraryDir) {
     this.activity = activity;
     this.xServer = xServer;
     this.socketConfig = unixSocketConfig;
@@ -63,7 +63,6 @@ public class VortekRendererComponent extends EnvironmentComponent implements Con
     else
       this.format = false;
 
-    String nativeLibraryDir = activity.getBaseContext().getApplicationInfo().nativeLibraryDir;
     initVulkanWrapper(nativeLibraryDir, options.libvulkanPath);
   }
 
