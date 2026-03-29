@@ -149,6 +149,7 @@
         <item>0.3.1-4f6a66f</item>
         <item>0.3.5-11563f3</item>
         <item>0.3.8-81c56d7</item>
+        <item>0.4.1-c85b3d6</item>
     </string-array>
     <string-array name="dinput_mapper_type_entries">
         <item>@string/dinput_legacy</item>
