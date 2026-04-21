@@ -16,12 +16,13 @@ public class Drawable extends XResource {
     public final Visual visual;
     private Texture texture = new Texture();
     private ByteBuffer data;
+    private boolean useSharedData;
     private Runnable onDrawListener;
+    private boolean offscreenStorage = false;
     private Callback<Drawable> onDestroyListener;
     public final Object renderLock = new Object();
 
     private boolean blank = true;
-    private boolean offscreenStorage = false;
 
     static {
         System.loadLibrary("winlator7");
@@ -38,8 +39,16 @@ public class Drawable extends XResource {
     public static Drawable fromBitmap(Bitmap bitmap) {
         Drawable drawable = new Drawable(0, bitmap.getWidth(), bitmap.getHeight(), null);
         fromBitmap(bitmap, drawable.data);
-        drawable.blank = false; ///
+        drawable.blank = false;
         return drawable;
+    }
+
+    public boolean isOffscreenStorage() {
+        return offscreenStorage;
+    }
+
+    public void setOffscreenStorage(boolean offscreenStorage) {
+        this.offscreenStorage = offscreenStorage;
     }
 
     public Texture getTexture() {
@@ -58,14 +67,6 @@ public class Drawable extends XResource {
     public void setData(ByteBuffer data) {
         this.data = data;
         this.blank = false;
-    }
-
-    public boolean isOffscreenStorage() {
-        return this.offscreenStorage;
-    }
-
-    public void setOffscreenStorage(boolean offscreenStorage) {
-        this.offscreenStorage = offscreenStorage;
     }
 
     private short getStride() {
@@ -89,6 +90,8 @@ public class Drawable extends XResource {
     }
 
     public void drawImage(short srcX, short srcY, short dstX, short dstY, short width, short height, byte depth, ByteBuffer data, short totalWidth, short totalHeight) {
+        if (this.data == null) return;
+
         if (depth == 1) {
             drawBitmap(width, height, data, this.data);
         }
@@ -104,8 +107,7 @@ public class Drawable extends XResource {
         this.data.rewind();
         data.rewind();
 
-        texture.setNeedsUpdate(true);
-        if (onDrawListener != null) onDrawListener.run();
+        forceUpdate();
     }
 
     public ByteBuffer getImage(short x, short y, short width, short height) {
@@ -144,8 +146,7 @@ public class Drawable extends XResource {
         this.data.rewind();
         drawable.data.rewind();
 
-        texture.setNeedsUpdate(true);
-        if (onDrawListener != null) onDrawListener.run();
+        forceUpdate();
     }
 
     public void fillColor(int color) {
@@ -153,6 +154,7 @@ public class Drawable extends XResource {
     }
 
     public void fillRect(int x, int y, int width, int height, int color) {
+        if (this.data == null) return;
         x = (short)Mathf.clamp(x, 0, this.width-1);
         y = (short)Mathf.clamp(y, 0, this.height-1);
         if ((x + width) > this.width) width = (short)((this.width - x));
@@ -160,9 +162,7 @@ public class Drawable extends XResource {
 
         fillRect((short)x, (short)y, (short)width, (short)height, color, this.getStride(), this.data);
         this.data.rewind();
-
-        texture.setNeedsUpdate(true);
-        if (onDrawListener != null) onDrawListener.run();
+        forceUpdate();
     }
 
     public void drawLines(int color, int lineWidth, short... points) {
@@ -180,27 +180,30 @@ public class Drawable extends XResource {
         drawLine((short)x0, (short)y0, (short)x1, (short)y1, color, (short)lineWidth, this.getStride(), this.data);
 
         this.data.rewind();
-
-        texture.setNeedsUpdate(true);
-        if (onDrawListener != null) onDrawListener.run();
+        forceUpdate();
     }
 
     public void drawAlphaMaskedBitmap(byte foreRed, byte foreGreen, byte foreBlue, byte backRed, byte backGreen, byte backBlue, Drawable srcDrawable, Drawable maskDrawable) {
+        if (this.data == null || srcDrawable.data == null || maskDrawable.data == null) return;
         drawAlphaMaskedBitmap(foreRed, foreGreen, foreBlue, backRed, backGreen, backBlue, srcDrawable.data, maskDrawable.data, this.data);
         this.data.rewind();
 
-        texture.setNeedsUpdate(true);
-        if (onDrawListener != null) onDrawListener.run();
+        forceUpdate();
     }
 
     public void forceUpdate() {
-        if (!this.offscreenStorage) {
+        if (!offscreenStorage) {
             texture.setNeedsUpdate(true);
-            blank = false;
-            Runnable runnable = this.onDrawListener;
-            if (runnable != null)
-                runnable.run();
+            if (onDrawListener != null) onDrawListener.run();
         }
+    }
+
+    public boolean isUseSharedData() {
+        return useSharedData;
+    }
+
+    public void setUseSharedData(boolean useSharedData) {
+        this.useSharedData = useSharedData;
     }
 
     public boolean isBlank() {

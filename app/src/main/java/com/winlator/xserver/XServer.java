@@ -190,10 +190,7 @@ public class XServer {
         extensions.put(DRI3Extension.MAJOR_OPCODE, new DRI3Extension());
         extensions.put(PresentExtension.MAJOR_OPCODE, new PresentExtension());
         extensions.put(SyncExtension.MAJOR_OPCODE, new SyncExtension());
-        if (screenInfo.enableCompositeExtension) {
-            Log.d("XServer", "Composite extension enabled");
-            extensions.put(XComposite.MAJOR_OPCODE, new XComposite());
-        }
+        extensions.put(XComposite.MAJOR_OPCODE, new XComposite());
         extensions.put(GLXExtension.MAJOR_OPCODE, new GLXExtension(this));
     }
 

@@ -5,6 +5,7 @@ import android.util.SparseArray;
 import com.winlator.xconnector.XInputStream;
 import com.winlator.xserver.errors.BadIdChoice;
 import com.winlator.xserver.errors.BadMatch;
+import com.winlator.xserver.errors.BadValue;
 import com.winlator.xserver.errors.XRequestError;
 import com.winlator.xserver.events.ConfigureNotify;
 import com.winlator.xserver.events.ConfigureRequest;
@@ -55,6 +56,15 @@ public class WindowManager extends XResourceManager {
 
     public Window getWindow(int id) {
         return windows.get(id);
+    }
+
+    public ArrayList<Window> findDialogWindows(int id) {
+        ArrayList<Window> result = new ArrayList<>();
+        for (int i = 0; i < windows.size(); i++) {
+            Window window = windows.valueAt(i);
+            if (window != null && window.getTransientFor() == id && window.isDialogBox()) result.add(window);
+        }
+        return result;
     }
 
     public Window findWindowWithProcessId(int processId) {
@@ -110,6 +120,11 @@ public class WindowManager extends XResourceManager {
             if (window == focusedWindow) revertFocus();
             triggerOnUnmapWindow(window);
         }
+    }
+
+    public void mapSubWindows(Window window) {
+        for (Window child : window.getChildren()) mapSubWindows(child);
+        mapWindow(window);
     }
 
     public Window getFocusedWindow() {
@@ -223,7 +238,7 @@ public class WindowManager extends XResourceManager {
         triggerOnChangeWindowZOrder(window);
     }
 
-    public void configureWindow(Window window, Bitmask valueMask, XInputStream inputStream) {
+    public void configureWindow(Window window, Bitmask valueMask, XInputStream inputStream) throws XRequestError {
         short x = window.getX();
         short y = window.getY();
         short width = window.getWidth();
@@ -257,6 +272,9 @@ public class WindowManager extends XResourceManager {
                     break;
             }
         }
+
+        if (width <= 0) throw new BadValue(width);
+        if (height <= 0) throw new BadValue(height);
 
         Window parent = window.getParent();
         boolean overrideRedirect = window.attributes.isOverrideRedirect();
@@ -297,31 +315,31 @@ public class WindowManager extends XResourceManager {
         onWindowModificationListeners.remove(onWindowModificationListener);
     }
 
-    private void triggerOnMapWindow(Window window) {
+    public void triggerOnMapWindow(Window window) {
         for (int i = onWindowModificationListeners.size()-1; i >= 0; i--) {
             onWindowModificationListeners.get(i).onMapWindow(window);
         }
     }
 
-    private void triggerOnUnmapWindow(Window window) {
+    public void triggerOnUnmapWindow(Window window) {
         for (int i = onWindowModificationListeners.size()-1; i >= 0; i--) {
             onWindowModificationListeners.get(i).onUnmapWindow(window);
         }
     }
 
-    private void triggerOnChangeWindowZOrder(Window window) {
+    public void triggerOnChangeWindowZOrder(Window window) {
         for (int i = onWindowModificationListeners.size()-1; i >= 0; i--) {
             onWindowModificationListeners.get(i).onChangeWindowZOrder(window);
         }
     }
 
-    protected void triggerOnUpdateWindowContent(Window window) {
+    public void triggerOnUpdateWindowContent(Window window) {
         for (int i = onWindowModificationListeners.size()-1; i >= 0; i--) {
             onWindowModificationListeners.get(i).onUpdateWindowContent(window);
         }
     }
 
-    protected void triggerOnUpdateWindowGeometry(Window window, boolean resized) {
+    public void triggerOnUpdateWindowGeometry(Window window, boolean resized) {
         for (int i = onWindowModificationListeners.size()-1; i >= 0; i--) {
             onWindowModificationListeners.get(i).onUpdateWindowGeometry(window, resized);
         }

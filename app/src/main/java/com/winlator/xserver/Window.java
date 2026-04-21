@@ -22,12 +22,14 @@ public class Window extends XResource {
     public enum StackMode {ABOVE, BELOW, TOP_IF, BOTTOM_IF, OPPOSITE}
     public enum MapState {UNMAPPED, UNVIEWABLE, VIEWABLE}
     public enum WMHints {FLAGS, INPUT, INITIAL_STATE, ICON_PIXMAP, ICON_WINDOW, ICON_X, ICON_Y, ICON_MASK, WINDOW_GROUP}
+    public enum Type {NORMAL, DIALOG}
     private Drawable content;
     private short x;
     private short y;
     private short width;
     private short height;
     private short borderWidth;
+    private ArrayMap<String, Object> tags;
     private Window parent;
     public final XClient originClient;
     public final WindowAttributes attributes = new WindowAttributes(this);
@@ -35,8 +37,6 @@ public class Window extends XResource {
     private final ArrayList<Window> children = new ArrayList<>();
     private final List<Window> immutableChildren = Collections.unmodifiableList(children);
     private final ArrayList<EventListener> eventListeners = new ArrayList<>();
-
-    private ArrayMap<String, Object> tags;
 
     public Window(int id, Drawable content, int x, int y, int width, int height, XClient originClient) {
         super(id);
@@ -86,6 +86,30 @@ public class Window extends XResource {
 
     public void setBorderWidth(short borderWidth) {
         this.borderWidth = borderWidth;
+    }
+
+    public void setTag(Object value) {
+        setTag("tag", value);
+    }
+
+    public Object getTag() {
+        return getTag("tag");
+    }
+
+    public void setTag(String key, Object value) {
+        (tags == null ? (tags = new ArrayMap<>()) : tags).put(key, value);
+    }
+
+    public Object getTag(String key) {
+        return getTag(key, null);
+    }
+
+    public Object getTag(String key, Object fallback) {
+        return (tags == null ? (tags = new ArrayMap<>()) : tags).getOrDefault(key, fallback);
+    }
+
+    public void removeTag(String key) {
+        if (tags != null) tags.remove(key);
     }
 
     public Drawable getContent() {
@@ -168,9 +192,45 @@ public class Window extends XResource {
         return property != null ? property.getInt(0) : 0;
     }
 
+    public int getTransientFor() {
+        Property property = getProperty(Atom.getId("WM_TRANSIENT_FOR"));
+        return property != null ? property.getInt(0) : 0;
+    }
+
     public boolean isWoW64() {
         Property property = getProperty(Atom.getId("_NET_WM_WOW64"));
         return property != null && property.data.get(0) == 1;
+    }
+
+    public boolean isSurface() {
+        Property property = getProperty(Atom.getId("_NET_WM_SURFACE"));
+        return property != null && property.data.get(0) == 1;
+    }
+
+    public boolean isDesktopWindow() {
+        return getClassName().equals("explorer.exe");
+    }
+
+    public boolean isDialogBox() {
+        return getType() == Type.DIALOG && getTransientFor() > 0 && hasDecoration(Decoration.TITLE) && !(hasDecoration(Decoration.MINIMIZE) && hasDecoration(Decoration.MAXIMIZE));
+    }
+
+    public Bitmask getDecorations() {
+        Property property = getProperty(Atom.getId("_MOTIF_WM_HINTS"));
+        return new Bitmask(property != null ? property.getInt(2) : 0);
+    }
+
+    public boolean hasNoDecorations() {
+        return getDecorations().isEmpty();
+    }
+
+    public boolean hasDecoration(Decoration decoration) {
+        return getDecorations().isSet(decoration.flag());
+    }
+
+    public Type getType() {
+        Property property = getProperty(Atom.getId("_NET_WM_WINDOW_TYPE"));
+        return property != null && property.toString().equals("_NET_WM_WINDOW_TYPE_DIALOG") ? Type.DIALOG : Type.NORMAL;
     }
 
     public long getHandle() {
@@ -180,7 +240,7 @@ public class Window extends XResource {
 
     public boolean isApplicationWindow() {
         int windowGroup = getWMHintsValue(WMHints.WINDOW_GROUP);
-        return attributes.isMapped() && !getName().isEmpty() && windowGroup == id && width > 1 && height > 1;
+        return isRenderable() && !getName().isEmpty() && windowGroup == id;
     }
 
     public boolean isInputOutput() {
@@ -209,18 +269,16 @@ public class Window extends XResource {
         children.remove(child);
         if (sibling != null && children.contains(sibling)) {
             children.add(children.indexOf(sibling) + 1, child);
-            return;
         }
-        children.add(child);
+        else children.add(child);
     }
 
     public void moveChildBelow(Window child, Window sibling) {
         children.remove(child);
         if (sibling != null && children.contains(sibling)) {
             children.add(children.indexOf(sibling), child);
-            return;
         }
-        children.add(0, child);
+        else children.add(0, child);
     }
 
     public List<Window> getChildren() {
@@ -289,6 +347,10 @@ public class Window extends XResource {
         for (EventListener eventListener : eventListeners) eventListener.sendEvent(event);
     }
 
+    public boolean isRenderable() {
+        return attributes.isMapped() && width > 1 && height > 1;
+    }
+
     public boolean containsPoint(short rootX, short rootY) {
         short[] localPoint = rootPointToLocal(rootX, rootY);
         return localPoint[0] >= 0 && localPoint[1] >= 0 && localPoint[0] < width && localPoint[1] < height;
@@ -332,26 +394,6 @@ public class Window extends XResource {
             window = window.parent;
         }
         return rootY;
-    }
-
-    public Object getTag(String tag, Object value) {
-        ArrayMap<String, Object> arrayMap2 = this.tags;
-        ArrayMap<String, Object> arrayMap1 = arrayMap2;
-        if (arrayMap2 == null) {
-            arrayMap1 = new ArrayMap();
-            this.tags = arrayMap1;
-        }
-        return arrayMap1.getOrDefault(tag, value);
-    }
-
-    public void setTag(String tag, Object value) {
-        ArrayMap<String, Object> arrayMap2 = this.tags;
-        ArrayMap<String, Object> arrayMap1 = arrayMap2;
-        if (arrayMap2 == null) {
-            arrayMap1 = new ArrayMap();
-            this.tags = arrayMap1;
-        }
-        arrayMap1.put(tag, value);
     }
 
     public Window getAncestorWithEventMask(Bitmask eventMask) {
@@ -436,5 +478,15 @@ public class Window extends XResource {
             result += property.nameAsString()+"="+property+"\n";
         }
         return result;
+    }
+
+    public boolean isIconic() {
+        final int iconicState = 3;
+        return getWMHintsValue(WMHints.INITIAL_STATE) == iconicState || height <= 32;
+    }
+
+    public boolean isLayered() {
+        final int WindowLayeredHint = 1<<16;
+        return (getWMHintsValue(WMHints.FLAGS) & WindowLayeredHint) != 0;
     }
 }

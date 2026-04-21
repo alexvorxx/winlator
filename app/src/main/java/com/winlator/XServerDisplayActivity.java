@@ -313,7 +313,6 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         inputControlsManager = new InputControlsManager(this);
 
         screeninfo = new ScreenInfo(screenSize);
-        screeninfo.enableCompositeExtension = preferences.getBoolean("use_composite", false);
 
         xServer = new XServer(screeninfo);
         xServer.setWinHandler(winHandler);
