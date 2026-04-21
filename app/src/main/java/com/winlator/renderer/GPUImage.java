@@ -23,6 +23,10 @@ public class GPUImage extends Texture {
         this(width, height, true, true);
     }
 
+    public GPUImage(short width, short height, boolean cpuAccess) {
+        this(width, height, cpuAccess, true);
+    }
+
     public GPUImage(short width, short height, boolean cpuAccess, boolean format) {
         hardwareBufferPtr = createHardwareBuffer(width, height, cpuAccess, format);
         if (cpuAccess && hardwareBufferPtr != 0) {

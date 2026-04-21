@@ -3,6 +3,8 @@ package com.winlator.xserver.extensions;
 import static com.winlator.xserver.XClientRequestHandler.RESPONSE_CODE_SUCCESS;
 
 import com.winlator.core.Callback;
+import com.winlator.renderer.GPUImage;
+import com.winlator.renderer.Texture;
 import com.winlator.sysvshm.SysVSharedMemory;
 import com.winlator.xconnector.XConnectorEpoll;
 import com.winlator.xconnector.XInputStream;
@@ -18,6 +20,7 @@ import com.winlator.xserver.errors.BadAlloc;
 import com.winlator.xserver.errors.BadDrawable;
 import com.winlator.xserver.errors.BadIdChoice;
 import com.winlator.xserver.errors.BadImplementation;
+import com.winlator.xserver.errors.BadPixmap;
 import com.winlator.xserver.errors.BadWindow;
 import com.winlator.xserver.errors.XRequestError;
 
@@ -35,6 +38,7 @@ public class DRI3Extension implements Extension {
         private static final byte QUERY_VERSION = 0;
         private static final byte OPEN = 1;
         private static final byte PIXMAP_FROM_BUFFER = 2;
+        private static final byte BUFFER_FROM_PIXMAP = 3;
         private static final byte GET_SUPPORTED_MODIFIERS = 6;
         private static final byte PIXMAP_FROM_BUFFERS = 7;
     }
@@ -107,6 +111,42 @@ public class DRI3Extension implements Extension {
 
         int fd = inputStream.getAncillaryFd();
         pixmapFromFd(client, pixmapId, width, height, stride, 0, depth, fd, size);
+    }
+
+    private void bufferFromPixmap(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
+        int windowId = inputStream.readInt();
+
+        Window window = client.xServer.windowManager.getWindow(windowId);
+        if (window == null || !GPUImage.isSupported()) throw new BadPixmap(windowId);
+
+        Drawable content = window.getContent();
+        final Texture texture = content.getTexture();
+
+        if (!(texture instanceof GPUImage)) {
+            client.xServer.getRenderer().xServerView.queueEvent(texture::destroy);
+            content.setTexture(new GPUImage(content.width, content.height, false));
+        }
+
+        GPUImage gpuImage = (GPUImage)content.getTexture();
+        short stride = gpuImage.getStride();
+        int nativeHandle = gpuImage.getNativeHandle();
+
+        android.util.Log.d("DRI3Extension","bufferFromPixmap handle "+nativeHandle+", width "+content.width+", height "+content.height+", stride "+stride);
+
+        try (XStreamLock lock = outputStream.lock()) {
+            outputStream.writeByte(RESPONSE_CODE_SUCCESS);
+            outputStream.writeByte((byte)1);
+            outputStream.writeShort(client.getSequenceNumber());
+            outputStream.writeInt(0);
+            outputStream.writeInt(stride * content.height * 4);
+            outputStream.writeShort(content.width);
+            outputStream.writeShort(content.height);
+            outputStream.writeShort(stride);
+            outputStream.writeByte((byte)32);
+            outputStream.writeByte((byte)32);
+            outputStream.writePad(12);
+            outputStream.setAncillaryFd(nativeHandle);
+        }
     }
 
     private void pixmapFromBuffers(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
@@ -189,6 +229,10 @@ public class DRI3Extension implements Extension {
                     pixmapFromBuffer(client, inputStream, outputStream);
                 }
                 break;
+            case ClientOpcodes.BUFFER_FROM_PIXMAP:
+                try (XLock lock = client.xServer.lock(XServer.Lockable.WINDOW_MANAGER, XServer.Lockable.DRAWABLE_MANAGER)) {
+                    bufferFromPixmap(client, inputStream, outputStream);
+                }
             case ClientOpcodes.GET_SUPPORTED_MODIFIERS:
                 handleGetSupportedModifiers(client, inputStream, outputStream);
                 break;
