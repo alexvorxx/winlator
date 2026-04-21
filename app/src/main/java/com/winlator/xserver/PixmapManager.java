@@ -5,13 +5,15 @@ import android.util.SparseArray;
 
 public class PixmapManager extends XResourceManager {
     public final Visual visual;
+    public final Visual glxVisual;
     public final Visual[] supportedVisuals;
     public final PixmapFormat[] supportedPixmapFormats;
     private final SparseArray<Pixmap> pixmaps = new SparseArray<>();
 
     public PixmapManager() {
         visual = new Visual(IDGenerator.generate(), true, 32, 24, 0xff0000, 0x00ff00, 0x0000ff);
-        supportedVisuals = new Visual[]{visual, new Visual(IDGenerator.generate(), false, 1, 1, 0, 0, 0)};
+        glxVisual = new Visual(IDGenerator.generate(), true, 24, 8, 0xff0000, 0x00ff00, 0x0000ff);
+        supportedVisuals = new Visual[]{visual, glxVisual, new Visual(IDGenerator.generate(), false, 1, 1, 0, 0, 0)};
 
         supportedPixmapFormats = new PixmapFormat[] {
             new PixmapFormat(1, 1, 32),

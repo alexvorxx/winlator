@@ -9,6 +9,7 @@ import com.winlator.winhandler.WinHandler;
 import com.winlator.xserver.extensions.BigReqExtension;
 import com.winlator.xserver.extensions.DRI3Extension;
 import com.winlator.xserver.extensions.Extension;
+import com.winlator.xserver.extensions.GLXExtension;
 import com.winlator.xserver.extensions.MITSHMExtension;
 import com.winlator.xserver.extensions.PresentExtension;
 import com.winlator.xserver.extensions.SyncExtension;
@@ -193,6 +194,7 @@ public class XServer {
             Log.d("XServer", "Composite extension enabled");
             extensions.put(XComposite.MAJOR_OPCODE, new XComposite());
         }
+        extensions.put(GLXExtension.MAJOR_OPCODE, new GLXExtension(this));
     }
 
     public <T extends Extension> T getExtension(int opcode) {

@@ -44,7 +44,16 @@ public class XClientRequestHandler implements RequestHandler {
     private void sendServerInformation(XClient client, XOutputStream outputStream) throws IOException {
         short vendorNameLength = (short)XServer.VENDOR_NAME.length();
         byte pixmapFormatCount = (byte)client.xServer.pixmapManager.supportedPixmapFormats.length;
-        short additionalDataLength = (short)(8 + (2 * pixmapFormatCount) + ((vendorNameLength + 3) / 4) + ((40 + 8 * client.xServer.pixmapManager.supportedVisuals.length + 24) + 3) / 4);
+        //short additionalDataLength = (short)(8 + (2 * pixmapFormatCount) + ((vendorNameLength + 3) / 4) + ((40 + 8 * client.xServer.pixmapManager.supportedVisuals.length + 24) + 3) / 4);
+        int visualDataLength = 0;
+            for (Visual v : client.xServer.pixmapManager.supportedVisuals) {
+                visualDataLength += 8; // depth, pad, class, pad
+                if (v.displayable) {
+                    visualDataLength += 24; // id, visualClass, bitsPerRGBValue, colormapEntries, redMask, greenMask, blueMask, pad
+                }
+            }
+        int totalLength = 8 + (2 * pixmapFormatCount) + ((vendorNameLength + 3) / 4) + ((40 + visualDataLength + 3) / 4);
+        short additionalDataLength = (short) totalLength;
 
         try (XStreamLock lock = outputStream.lock()) {
             outputStream.writeByte(RESPONSE_CODE_SUCCESS);

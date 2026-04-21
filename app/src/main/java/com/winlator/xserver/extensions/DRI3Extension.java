@@ -35,6 +35,7 @@ public class DRI3Extension implements Extension {
         private static final byte QUERY_VERSION = 0;
         private static final byte OPEN = 1;
         private static final byte PIXMAP_FROM_BUFFER = 2;
+        private static final byte GET_SUPPORTED_MODIFIERS = 6;
         private static final byte PIXMAP_FROM_BUFFERS = 7;
     }
 
@@ -67,7 +68,7 @@ public class DRI3Extension implements Extension {
             outputStream.writeShort(client.getSequenceNumber());
             outputStream.writeInt(0);
             outputStream.writeInt(1);
-            outputStream.writeInt(0);
+            outputStream.writeInt(2);
             outputStream.writePad(16);
         }
     }
@@ -148,9 +149,32 @@ public class DRI3Extension implements Extension {
         }
     }
 
+    private void handleGetSupportedModifiers(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException {
+        int window = inputStream.readInt();
+        int depth = inputStream.readByte() & 0xFF;
+        int bpp = inputStream.readByte() & 0xFF;
+        inputStream.skip(2);
+
+        int numWindowModifiers = 0;
+        int numScreenModifiers = 0;
+        int length = 2;
+
+        try (XStreamLock lock = outputStream.lock()) {
+            outputStream.writeByte(RESPONSE_CODE_SUCCESS);
+            outputStream.writeByte((byte) 0);
+            outputStream.writeShort(client.getSequenceNumber());
+            outputStream.writeInt(length);
+            outputStream.writeInt(numWindowModifiers);
+            outputStream.writeInt(numScreenModifiers);
+            outputStream.writePad(16);
+            outputStream.writePad(8);
+        }
+    }
+
     @Override
     public void handleRequest(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException, XRequestError {
         int opcode = client.getRequestData();
+        //Log.d("DRI3Extension", "DRI3 minor opcode received: " + opcode);
         switch (opcode) {
             case ClientOpcodes.QUERY_VERSION :
                 queryVersion(client, inputStream, outputStream);
@@ -164,6 +188,9 @@ public class DRI3Extension implements Extension {
                 try (XLock lock = client.xServer.lock(XServer.Lockable.WINDOW_MANAGER, XServer.Lockable.PIXMAP_MANAGER, XServer.Lockable.DRAWABLE_MANAGER)) {
                     pixmapFromBuffer(client, inputStream, outputStream);
                 }
+                break;
+            case ClientOpcodes.GET_SUPPORTED_MODIFIERS:
+                handleGetSupportedModifiers(client, inputStream, outputStream);
                 break;
             case ClientOpcodes.PIXMAP_FROM_BUFFERS:
                 try (XLock lock = client.xServer.lock(XServer.Lockable.WINDOW_MANAGER, XServer.Lockable.PIXMAP_MANAGER, XServer.Lockable.DRAWABLE_MANAGER)) {
