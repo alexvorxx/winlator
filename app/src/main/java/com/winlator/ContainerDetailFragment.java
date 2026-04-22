@@ -37,6 +37,7 @@ import com.winlator.container.ContainerManager;
 import com.winlator.contentdialog.AddEnvVarDialog;
 import com.winlator.contentdialog.ContentDialog;
 import com.winlator.contentdialog.DXVK_VKD3DConfigDialog;
+import com.winlator.contentdialog.FreedrenoConfigDialog;
 import com.winlator.contentdialog.TurnipConfigDialog;
 import com.winlator.contentdialog.VirGLConfigDialog;
 import com.winlator.contentdialog.VortekConfigDialog;
@@ -562,12 +563,14 @@ public class ContainerDetailFragment extends Fragment {
                 if (graphicsDriver.startsWith("turnip")) {
                     vGraphicsDriverConfig.setOnClickListener((v) -> (new TurnipConfigDialog(vGraphicsDriverConfig)).show());
                     vGraphicsDriverConfig.setVisibility(View.VISIBLE);
-                }
-                else if (graphicsDriver.startsWith("vortek")) {
+                } else if (graphicsDriver.startsWith("vortek")) {
                     vGraphicsDriverConfig.setOnClickListener((v) -> (new VortekConfigDialog(vGraphicsDriverConfig)).show());
                     vGraphicsDriverConfig.setVisibility(View.VISIBLE);
                 } else if (graphicsDriver.startsWith("virgl")) {
                     vGraphicsDriverConfig.setOnClickListener((v) -> (new VirGLConfigDialog(vGraphicsDriverConfig)).show());
+                    vGraphicsDriverConfig.setVisibility(View.VISIBLE);
+                } else if (graphicsDriver.startsWith("freedreno")) {
+                    vGraphicsDriverConfig.setOnClickListener((v) -> (new FreedrenoConfigDialog(vGraphicsDriverConfig)).show());
                     vGraphicsDriverConfig.setVisibility(View.VISIBLE);
                 } else
                     vGraphicsDriverConfig.setVisibility(View.GONE);

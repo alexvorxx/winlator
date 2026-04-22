@@ -234,6 +234,7 @@
     <string name="dpi">DPI (Размер шрифта)</string>
     <string name="max_device_memory">Максимальный объем памяти</string>
     <string name="present_mode">Режим отображения</string>
+    <string name="vsync" translatable="false">Вертикальная синхронизация</string>
     <string name="frame_rate">Частота кадров</string>
     <string name="configuration">Конфигурация</string>
     <string name="browse">Просмотреть</string>

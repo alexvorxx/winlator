@@ -242,6 +242,8 @@
     <string name="max_device_memory">Max Device Memory</string>
     <string name="present_mode" translatable="false">Present mode</string>
     <string name="tu_debug" translatable="false">TU_DEBUG</string>
+    <string name="fd_mesa_debug" translatable="false">FD_MESA_DEBUG</string>
+    <string name="vsync" translatable="false">Vertical synchronization</string>
     <string name="frame_rate">Frame Rate</string>
     <string name="configuration">Configuration</string>
     <string name="browse">Browse</string>
