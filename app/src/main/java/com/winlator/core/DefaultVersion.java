@@ -6,7 +6,7 @@ public abstract class DefaultVersion {
     public static final String TURNIP = "24.1.0";
     public static final String ZINK = "22.2.0";
     public static final String VIRGL = "23.1.9";
-    public static final String VORTEK = "2.0";
+    public static final String VORTEK = "2.1";
     public static final String LLVMPIPE = "26.0.0";
     public static final String FREEDRENO = "26.0.0";
     public static final String DXVK = "1.10.3-async";

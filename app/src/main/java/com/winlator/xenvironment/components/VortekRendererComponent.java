@@ -1,9 +1,5 @@
 package com.winlator.xenvironment.components;
 
-/* Decompiled from Winlator 10 Final
- * https://github.com/brunodev85/winlator/releases/tag/v10.0.0
-*/
-
 import androidx.annotation.Keep;
 
 import com.winlator.XServerDisplayActivity;
@@ -27,58 +23,103 @@ import java.io.IOException;
 import java.util.Objects;
 
 public class VortekRendererComponent extends EnvironmentComponent implements ConnectionHandler, RequestHandler {
+  private static final byte REQUEST_CODE_CREATE_CONTEXT = 1;
+  private static final byte REQUEST_CODE_SEND_EXTRA_DATA = 2;
+  public static final short IMAGE_CACHE_SIZE = 256;
   public static final int VK_MAX_VERSION = vkMakeVersion(1, 3, 128);
-  
   private XConnectorEpoll connector;
-  
   private final Options options;
-  
   private final UnixSocketConfig socketConfig;
-
   private final XServerDisplayActivity activity;
-  
   private final XServer xServer;
 
-  private final String renderName;
-
-  private final boolean format;
-
-  /*static {
+  static {
     System.loadLibrary("vortekrenderer");
-  }*/
-
-  public VortekRendererComponent(XServer xServer, UnixSocketConfig unixSocketConfig, Options options, String renderName, String nativeLibraryDir) {
-    this(null, xServer, unixSocketConfig, options, renderName, nativeLibraryDir);
   }
 
-  public VortekRendererComponent(XServerDisplayActivity activity, XServer xServer, UnixSocketConfig unixSocketConfig, Options options, String renderName, String nativeLibraryDir) {
+  public VortekRendererComponent(XServer xServer, UnixSocketConfig unixSocketConfig, Options options, String nativeLibraryDir) {
+    this(null, xServer, unixSocketConfig, options, nativeLibraryDir);
+  }
+
+  public VortekRendererComponent(XServerDisplayActivity activity, XServer xServer, UnixSocketConfig socketConfig, Options options, String nativeLibraryDir) {
     this.activity = activity;
     this.xServer = xServer;
-    this.socketConfig = unixSocketConfig;
+    this.socketConfig = socketConfig;
     this.options = options;
-    this.renderName = renderName;
-    System.loadLibrary(this.renderName);
-    if (this.renderName.equals("vortekrenderer-110"))
-      this.format = true;
-    else
-      this.format = false;
 
     initVulkanWrapper(nativeLibraryDir, options.libvulkanPath);
   }
 
-  private native long createVkContext(int paramInt, Options paramOptions);
-  
-  private native void destroyVkContext(long paramLong);
+  public static class Options {
+    public int vkMaxVersion = VK_MAX_VERSION;
+    public short maxDeviceMemory = 0;
+    public short imageCacheSize = IMAGE_CACHE_SIZE;
+    public byte resourceMemoryType = 0;
+    public String[] exposedDeviceExtensions = null;
+    public String libvulkanPath = null;
 
-  private native void initVulkanWrapper(String paramString1, String paramString2);
+    public static Options fromKeyValueSet(KeyValueSet config) {
+      if (config == null || config.isEmpty())
+        return new Options();
 
-  static int vkMakeVersion(int paramInt1, int paramInt2, int paramInt3) {
-    return paramInt1 << 22 | paramInt2 << 12 | paramInt3;
+      Options options = new Options();
+      String str1 = config.get("exposedDeviceExtensions", "all");
+      if (!str1.isEmpty() && !str1.equals("all"))
+        options.exposedDeviceExtensions = str1.split("\\|");
+      str1 = VortekConfigDialog.DEFAULT_VK_MAX_VERSION;
+      String str2 = config.get("vkMaxVersion", str1);
+      if (!str2.equals(str1)) {
+        String[] arrayOfString = str2.split("\\.");
+        options.vkMaxVersion = vkMakeVersion(Integer.parseInt(arrayOfString[0]), Integer.parseInt(arrayOfString[1]), 128);
+      }
+      options.maxDeviceMemory = (short)config.getInt("maxDeviceMemory", 512);
+      options.imageCacheSize = (short)config.getInt("imageCacheSize", VortekRendererComponent.IMAGE_CACHE_SIZE);
+      options.resourceMemoryType = (byte)config.getInt("resourceMemoryType", 0);
+
+      if (config.getInt("driverVersion", 0) == 0)
+        options.libvulkanPath = null;
+      else
+        options.libvulkanPath = config.get("libraryPath");
+
+      return options;
+    }
   }
-  
+
+  static int vkMakeVersion(int major, int minor, int patch) {
+    return major << 22 | minor << 12 | patch;
+  }
+
+  public void start() {
+    if (connector != null)
+      return;
+    connector = new XConnectorEpoll(socketConfig, this, this);
+    connector.setInitialInputBufferCapacity(1);
+    connector.setInitialOutputBufferCapacity(0);
+    connector.start();
+  }
+
+  public void stop() {
+    if (connector != null) {
+      connector.stop();
+      connector = null;
+    }
+  }
+
   @Keep
-  private long getWindowHardwareBuffer(int paramInt) {
-    Window window = this.xServer.windowManager.getWindow(paramInt);
+  private int getWindowWidth(int windowId) {
+    Window window = xServer.windowManager.getWindow(windowId);
+    return window != null ? window.getWidth() : 0;
+  }
+
+  @Keep
+  private int getWindowHeight(int windowId) {
+    Window window = xServer.windowManager.getWindow(windowId);
+    return window != null ? window.getHeight() : 0;
+  }
+
+  @Keep
+  private long getWindowHardwareBuffer(int windowId, boolean useHALPixelFormatBGRA8888) {
+    Window window = this.xServer.windowManager.getWindow(windowId);
     if (window != null) {
       Drawable drawable = window.getContent();
       Texture texture = drawable.getTexture();
@@ -86,38 +127,16 @@ public class VortekRendererComponent extends EnvironmentComponent implements Con
         XServerView xServerView = (this.xServer.getRenderer()).xServerView;
         Objects.requireNonNull(texture);
         xServerView.queueEvent(texture::destroy);
-        drawable.setTexture((Texture)new GPUImage(drawable.width, drawable.height, false, this.format));
+        drawable.setTexture((Texture)new GPUImage(drawable.width, drawable.height, false, useHALPixelFormatBGRA8888));
       } 
       return ((GPUImage)drawable.getTexture()).getHardwareBufferPtr();
     } 
     return 0L;
   }
-  
+
   @Keep
-  private int getWindowHeight(int paramInt) {
-    Window window = this.xServer.windowManager.getWindow(paramInt);
-    if (window != null) {
-      paramInt = window.getHeight();
-    } else {
-      paramInt = 0;
-    } 
-    return paramInt;
-  }
-  
-  @Keep
-  private int getWindowWidth(int paramInt) {
-    Window window = this.xServer.windowManager.getWindow(paramInt);
-    if (window != null) {
-      paramInt = window.getWidth();
-    } else {
-      paramInt = 0;
-    } 
-    return paramInt;
-  }
-  
-  @Keep
-  private void updateWindowContent(int paramInt) {
-    Window window = this.xServer.windowManager.getWindow(paramInt);
+  private void updateWindowContent(int windowId) {
+    Window window = this.xServer.windowManager.getWindow(windowId);
     if (window != null) {
       Drawable drawable = window.getContent();
       changeFrameRatingVisibility(window);
@@ -137,88 +156,44 @@ public class VortekRendererComponent extends EnvironmentComponent implements Con
     }
   }
   
-  public void handleConnectionShutdown(Client paramClient) {
-    if (paramClient.getTag() != null)
-      destroyVkContext(((Long)paramClient.getTag()).longValue()); 
+  public void handleConnectionShutdown(Client client) {
+    if (client.getTag() != null)
+      destroyVkContext((Long) client.getTag());
   }
   
-  public void handleNewConnection(Client paramClient) {
-    paramClient.createIOStreams();
+  public void handleNewConnection(Client client) {
+    client.createIOStreams();
   }
   
-  public boolean handleRequest(Client paramClient) throws IOException {
-    XInputStream xInputStream = paramClient.getInputStream();
-    if (xInputStream.available() < 1)
-      return false; 
-    if (xInputStream.readByte() == 1) {
-      long l = createVkContext(paramClient.clientSocket.fd, this.options);
-      if (l > 0L) {
-        paramClient.setTag(Long.valueOf(l));
+  public boolean handleRequest(Client client) throws IOException {
+    XInputStream inputStream = client.getInputStream();
+    if (inputStream.available() < 8) return false;
+    int requestCode = inputStream.readInt();
+    int requestLength = inputStream.readInt();
+
+    if (requestCode == REQUEST_CODE_CREATE_CONTEXT) {
+      long contextPtr = createVkContext(client.clientSocket.fd, options);
+      if (contextPtr > 0) {
+        client.setTag(contextPtr);
       } else {
-        this.connector.killConnection(paramClient);
+        connector.killConnection(client);
       } 
-    } 
+    } else if (requestCode > Short.MAX_VALUE && (requestCode >> 16) == REQUEST_CODE_SEND_EXTRA_DATA) {
+      int requestId = requestCode & 0xffff;
+      long contextPtr = (long)client.getTag();
+      boolean success = handleExtraDataRequest(contextPtr, requestId, requestLength);
+      if (!success) throw new IOException("Failed to handle extra data request.");
+    }
+
     return true;
   }
-  
-  public void start() {
-    if (this.connector != null)
-      return; 
-    XConnectorEpoll xConnectorEpoll = new XConnectorEpoll(this.socketConfig, this, this);
-    this.connector = xConnectorEpoll;
-    xConnectorEpoll.setInitialInputBufferCapacity(1);
-    this.connector.setInitialOutputBufferCapacity(0);
-    this.connector.start();
-  }
-  
-  public void stop() {
-    XConnectorEpoll xConnectorEpoll = this.connector;
-    if (xConnectorEpoll != null) {
-      xConnectorEpoll.stop();
-      this.connector = null;
-    } 
-  }
-  
-  public static class Options {
-    public String[] exposedDeviceExtensions = null;
 
-    public short imageCacheSize = 256;
+  private native long createVkContext(int clientFd, Options options);
 
-    public String libvulkanPath = null;
-    
-    public short maxDeviceMemory = 4096;
+  private native void destroyVkContext(long contextPtr);
 
-    public byte resourceMemoryType = 0;
-    
-    public int vkMaxVersion = VortekRendererComponent.VK_MAX_VERSION;
+  private native void initVulkanWrapper(String nativeLibraryDir, String libvulkanPath);
 
-    public short renderVersion = 0;
-    
-    public static Options fromKeyValueSet(KeyValueSet keyValueSet) {
-      if (keyValueSet == null || keyValueSet.isEmpty())
-        return new Options();
+  private native boolean handleExtraDataRequest(long contextPtr, int requestCode, int requestLength);
 
-      Options options = new Options();
-      String str1 = keyValueSet.get("exposedDeviceExtensions", "all");
-      if (!str1.isEmpty() && !str1.equals("all"))
-        options.exposedDeviceExtensions = str1.split("\\|"); 
-      str1 = VortekConfigDialog.DEFAULT_VK_MAX_VERSION;
-      String str2 = keyValueSet.get("vkMaxVersion", str1);
-      if (!str2.equals(str1)) {
-        String[] arrayOfString = str2.split("\\.");
-        options.vkMaxVersion = vkMakeVersion(Integer.parseInt(arrayOfString[0]), Integer.parseInt(arrayOfString[1]), 128);
-      } 
-      options.maxDeviceMemory = (short)keyValueSet.getInt("maxDeviceMemory", 512);
-      options.imageCacheSize = (short)keyValueSet.getInt("imageCacheSize", 256);
-      options.resourceMemoryType = (byte)keyValueSet.getInt("resourceMemoryType", 0);
-      options.renderVersion = (short)keyValueSet.getInt("renderVersion", 0);
-
-      if (keyValueSet.getInt("driverVersion", 0) == 0)
-        options.libvulkanPath = null;
-      else
-        options.libvulkanPath = keyValueSet.get("libraryPath");
-
-      return options;
-    }
-  }
 }

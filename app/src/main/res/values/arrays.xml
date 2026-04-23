@@ -18,7 +18,7 @@
     <string-array name="graphics_driver_entries">
         <item>Turnip</item>
         <item>VirGL</item>
-        <item>Vortek-2.0/2.1</item>
+        <item>Vortek-2.1</item>
         <item>Freedreno-26.0.0</item>
         <item>LLVMPipe-26.0.0</item>
     </string-array>
@@ -116,10 +116,6 @@
         <item>Opaque FD</item>
         <item>DMA Buffer</item>
         <item>Native Hardware Buffer</item>
-    </string-array>
-    <string-array name="vortek_render_version_entries">
-        <item>10.1 (Hotfix)</item>
-        <item>11.0</item>
     </string-array>
     <string-array name="vortek_driver_version_entries" >
         <item>System</item>

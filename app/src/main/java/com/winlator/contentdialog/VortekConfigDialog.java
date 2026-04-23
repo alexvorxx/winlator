@@ -1,14 +1,9 @@
 package com.winlator.contentdialog;
 
-/* Decompiled from Winlator 10 Final
- * https://github.com/brunodev85/winlator/releases/tag/v10.0.0
- */
-
 import android.content.Context;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Spinner;
-import android.widget.SpinnerAdapter;
 
 import com.winlator.R;
 import com.winlator.contents.AdrenotoolsManager;
@@ -22,85 +17,82 @@ import java.util.ArrayList;
 import java.util.Arrays;
 
 public class VortekConfigDialog extends ContentDialog {
-  public static final String DEFAULT_VK_MAX_VERSION;
+    public static final String DEFAULT_VK_MAX_VERSION;
 
-  static {
-    StringBuilder stringBuilder = new StringBuilder();
-    int i = VortekRendererComponent.VK_MAX_VERSION;
-    stringBuilder.append(GPUHelper.vkVersionMajor(i));
-    stringBuilder.append(".");
-    stringBuilder.append(GPUHelper.vkVersionMinor(i));
-    DEFAULT_VK_MAX_VERSION = stringBuilder.toString();
-  }
+    static {
+        StringBuilder stringBuilder = new StringBuilder();
+        int i = VortekRendererComponent.VK_MAX_VERSION;
+        stringBuilder.append(GPUHelper.vkVersionMajor(i));
+        stringBuilder.append(".");
+        stringBuilder.append(GPUHelper.vkVersionMinor(i));
+        DEFAULT_VK_MAX_VERSION = stringBuilder.toString();
+    }
 
-  public static final String DEFAULT_CONFIG = "vkMaxVersion=" + DEFAULT_VK_MAX_VERSION +
-          ",maxDeviceMemory=512,imageCacheSize=256,resourceMemoryType=0,renderVersion=0,driverVersion=0";
+    public static final String DEFAULT_CONFIG = "vkMaxVersion=" + DEFAULT_VK_MAX_VERSION +
+          ",maxDeviceMemory=512,imageCacheSize=256,resourceMemoryType=0,driverVersion=0";
 
-  private final Context context;
+    private final Context context;
 
-  public VortekConfigDialog(View anchor) {
-    super(anchor.getContext(), R.layout.vortek_config_dialog);
-    context = anchor.getContext();
-    setIcon(R.drawable.icon_settings);
-    setTitle("Vortek " + context.getString(R.string.configuration));
+    public VortekConfigDialog(View anchor) {
+        super(anchor.getContext(), R.layout.vortek_config_dialog);
+        context = anchor.getContext();
+        setIcon(R.drawable.icon_settings);
+        setTitle("Vortek " + context.getString(R.string.configuration));
 
-    final Spinner SVulkanVersion = findViewById(R.id.SVulkanVersion);
-    final Spinner SMaxDeviceMemory = findViewById(R.id.SMaxDeviceMemory);
-    final Spinner SImageCacheSize = findViewById(R.id.SImageCacheSize);
-    final Spinner SResourceMemoryType = findViewById(R.id.SResourceMemoryType);
-    final Spinner SRenderVersion = findViewById(R.id.SRenderVersion);
-    final Spinner SDriverVersion = findViewById(R.id.SDriverVersion);
-    MultiSelectionComboBox multiSelectionComboBox = findViewById(R.id.CBExposedExtensions);
+        final Spinner SVulkanVersion = findViewById(R.id.SVulkanVersion);
+        final Spinner SMaxDeviceMemory = findViewById(R.id.SMaxDeviceMemory);
+        final Spinner SImageCacheSize = findViewById(R.id.SImageCacheSize);
+        final Spinner SResourceMemoryType = findViewById(R.id.SResourceMemoryType);
+        final Spinner SDriverVersion = findViewById(R.id.SDriverVersion);
+        MultiSelectionComboBox multiSelectionComboBox = findViewById(R.id.CBExposedExtensions);
 
-    AdrenotoolsManager adrenotoolsManager = new AdrenotoolsManager(context);
-    ArrayList<String> installedDrivers = new ArrayList<>(Arrays.asList((new String[] { "System" })));
-    installedDrivers.addAll(adrenotoolsManager.enumarateInstalledDrivers());
-    SDriverVersion.setAdapter(new ArrayAdapter(SDriverVersion.getContext(), android.R.layout.simple_spinner_dropdown_item, installedDrivers));
+        AdrenotoolsManager adrenotoolsManager = new AdrenotoolsManager(context);
+        ArrayList<String> installedDrivers = new ArrayList<>(Arrays.asList((new String[] { "System" })));
+        installedDrivers.addAll(adrenotoolsManager.enumarateInstalledDrivers());
+        SDriverVersion.setAdapter(new ArrayAdapter(SDriverVersion.getContext(), android.R.layout.simple_spinner_dropdown_item, installedDrivers));
 
-    String[] arrayOfString = GPUHelper.vkGetDeviceExtensions();
-    multiSelectionComboBox.setItems(arrayOfString);
+        String[] arrayOfString = GPUHelper.vkGetDeviceExtensions();
+        multiSelectionComboBox.setItems(arrayOfString);
 
-    KeyValueSet config = parseConfig(anchor.getTag());
-    String str = config.get("exposedDeviceExtensions", "all");
-    if (str.equals("all")) {
-      multiSelectionComboBox.setSelectedItems(arrayOfString);
-    } else if (!str.isEmpty()) {
-      multiSelectionComboBox.setSelectedItems(str.split("\\|"));
-    } 
-    AppUtils.setSpinnerSelectionFromValue(SVulkanVersion, config.get("vkMaxVersion", DEFAULT_VK_MAX_VERSION));
-    AppUtils.setSpinnerSelectionFromValue(SMaxDeviceMemory, config.get("maxDeviceMemory", String.valueOf(512)));
-    AppUtils.setSpinnerSelectionFromValue(SImageCacheSize, config.get("imageCacheSize", String.valueOf(256)));
-    SResourceMemoryType.setSelection(config.getInt("resourceMemoryType", 0));
-    SRenderVersion.setSelection(config.getInt("renderVersion", 0));
+        KeyValueSet config = parseConfig(anchor.getTag());
+        String str = config.get("exposedDeviceExtensions", "all");
+        if (str.equals("all")) {
+            multiSelectionComboBox.setSelectedItems(arrayOfString);
+        } else if (!str.isEmpty()) {
+            multiSelectionComboBox.setSelectedItems(str.split("\\|"));
+        }
+        AppUtils.setSpinnerSelectionFromValue(SVulkanVersion, config.get("vkMaxVersion", DEFAULT_VK_MAX_VERSION));
+        AppUtils.setSpinnerSelectionFromValue(SMaxDeviceMemory, config.get("maxDeviceMemory", String.valueOf(512)));
+        AppUtils.setSpinnerSelectionFromValue(SImageCacheSize, config.get("imageCacheSize", String.valueOf(256)));
+        SResourceMemoryType.setSelection(config.getInt("resourceMemoryType", 0));
 
-    if (config.getInt("driverVersion", 0) < installedDrivers.size())
-      SDriverVersion.setSelection(config.getInt("driverVersion", 0));
-    else
-      SDriverVersion.setSelection(0);
+        if (config.getInt("driverVersion", 0) < installedDrivers.size())
+            SDriverVersion.setSelection(config.getInt("driverVersion", 0));
+        else
+            SDriverVersion.setSelection(0);
 
-    setOnConfirmCallback(() -> {
-      config.put("vkMaxVersion", SVulkanVersion.getSelectedItem().toString());
-      config.put("maxDeviceMemory", SMaxDeviceMemory.getSelectedItem().toString());
-      config.put("imageCacheSize", SImageCacheSize.getSelectedItem().toString());
-      config.put("resourceMemoryType", SResourceMemoryType.getSelectedItemPosition());
-      config.put("exposedDeviceExtensions", String.join("|", multiSelectionComboBox.getSelectedItems()));
-      config.put("renderVersion", SRenderVersion.getSelectedItemPosition());
-      config.put("driverVersion", SDriverVersion.getSelectedItemPosition());
+        setOnConfirmCallback(() -> {
+            config.put("vkMaxVersion", SVulkanVersion.getSelectedItem().toString());
+            config.put("maxDeviceMemory", SMaxDeviceMemory.getSelectedItem().toString());
+            config.put("imageCacheSize", SImageCacheSize.getSelectedItem().toString());
+            config.put("resourceMemoryType", SResourceMemoryType.getSelectedItemPosition());
+            config.put("exposedDeviceExtensions", String.join("|", multiSelectionComboBox.getSelectedItems()));
+            config.put("driverVersion", SDriverVersion.getSelectedItemPosition());
 
-      if (SDriverVersion.getSelectedItemPosition() == 0) {
-        config.put("libraryPath", "");
-      } else {
-        String adrenotoolsDriverId = SDriverVersion.getSelectedItem().toString();
-        String libraryPath = adrenotoolsManager.getDriverPath(adrenotoolsDriverId) + adrenotoolsManager.getLibraryName(adrenotoolsDriverId);
-        config.put("libraryPath", libraryPath);
-      }
+            if (SDriverVersion.getSelectedItemPosition() == 0) {
+                config.put("libraryPath", "");
+            } else {
+                String adrenotoolsDriverId = SDriverVersion.getSelectedItem().toString();
+                String libraryPath = adrenotoolsManager.getDriverPath(adrenotoolsDriverId) + adrenotoolsManager.getLibraryName(adrenotoolsDriverId);
+                config.put("libraryPath", libraryPath);
+            }
 
-      anchor.setTag(config.toString());
-    });
-  }
+            anchor.setTag(config.toString());
+        });
+    }
 
-  public static KeyValueSet parseConfig(Object config) {
-    String data = config != null && !config.toString().isEmpty() ? config.toString() : DEFAULT_CONFIG;
-    return new KeyValueSet(data);
-  }
+    public static KeyValueSet parseConfig(Object config) {
+        String data = config != null && !config.toString().isEmpty() ? config.toString() : DEFAULT_CONFIG;
+        return new KeyValueSet(data);
+    }
 }

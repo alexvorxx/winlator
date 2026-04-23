@@ -722,12 +722,9 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         }
         else if (graphicsDriver.startsWith("vortek")) {
             VortekRendererComponent.Options options = VortekRendererComponent.Options.fromKeyValueSet(this.graphicsDriverConfig);
-            String renderName = "vortekrenderer-101";
-            if (options.renderVersion == 1)
-                renderName = "vortekrenderer-110";
             environment.addComponent(new VortekRendererComponent(this, xServer,
                     UnixSocketConfig.createSocket(rootPath, UnixSocketConfig.VORTEK_SERVER_PATH),
-                    options, renderName, getApplicationInfo().nativeLibraryDir));
+                    options, getApplicationInfo().nativeLibraryDir));
         }
 
         RCManager manager = new RCManager(this);
@@ -912,17 +909,14 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         int cacheContainerId = preferences.getInt("cache_container_id", 0);
         String cacheDriverId = container.getExtra("graphicsDriver");
         String cacheOldVirGL = container.getExtra("useOldVirGL", "false");
-        int cacheVortekRenderVersion = Integer.parseInt(container.getExtra("vortek_render_version", "0"));
 
         if (graphicsDriver.startsWith("turnip"))
             graphicsDriver += "-"+graphicsDriverConfig.get("version", DefaultVersion.TURNIP);
         else if (graphicsDriver.startsWith("virgl"))
             graphicsDriver += "-"+graphicsDriverConfig.get("version", DefaultVersion.VIRGL);
 
-        VortekRendererComponent.Options vortekOptions = VortekRendererComponent.Options.fromKeyValueSet(this.graphicsDriverConfig);
-
         boolean changed = (!cacheDriverId.equals(graphicsDriver)) || (cacheContainerId != container.id) ||
-                (!cacheOldVirGL.equals(String.valueOf(useOldVirGL))) || (cacheVortekRenderVersion != vortekOptions.renderVersion);
+                (!cacheOldVirGL.equals(String.valueOf(useOldVirGL)));
 
         File rootDir = imageFs.getRootDir();
 
@@ -934,7 +928,6 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             FileUtils.delete(new File(imageFs.getLib64Dir(), "libgallium-" + DefaultVersion.FREEDRENO + ".so"));
             container.putExtra("graphicsDriver", graphicsDriver);
             container.putExtra("useOldVirGL", useOldVirGL);
-            container.putExtra("vortek_render_version", vortekOptions.renderVersion);
             container.saveData();
             preferences.edit().putInt("cache_container_id", container.id).apply();
         }
@@ -1001,11 +994,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             }
 
             if (changed) {
-                if (vortekOptions.renderVersion == 1)
-                    TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/vortek-2.1.tzst", rootDir);
-                else
-                    TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/vortek-" + DefaultVersion.VORTEK + ".tzst", rootDir);
-
+                TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/vortek-" + DefaultVersion.VORTEK + ".tzst", rootDir);
                 TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/zink-" + DefaultVersion.ZINK + ".tzst", rootDir);
             }
         }
