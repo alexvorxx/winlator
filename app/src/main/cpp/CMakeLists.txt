@@ -10,21 +10,28 @@ add_subdirectory(virgl_test_server)
 add_subdirectory(OpenXR-SDK)
 add_subdirectory(patchelf)
 
-add_library(winlator7 SHARED
+include_directories(winlator/include)
+
+add_library(winlator SHARED
             xr/engine.c
             xr/framebuffer.c
             xr/input.c
             xr/main.c
             xr/math.c
             xr/renderer.c
+            winlator/arrays.c
             winlator/drawable.c
+            winlator/gpu_helper.c
             winlator/gpu_image.c
+            winlator/ring_buffer.c
             winlator/sysvshared_memory.c
             winlator/xconnector_epoll.c
+            winlator/xinput_stream.c
+            winlator/xoutput_stream.c
             winlator/alsa_client.c
             winlator/patchelf_wrapper.cpp)
 
-target_link_libraries(winlator7
+target_link_libraries(winlator
                       log
                       android
                       jnigraphics

@@ -2,6 +2,8 @@ package com.winlator.xserver;
 
 import android.graphics.Bitmap;
 
+import androidx.annotation.Nullable;
+
 import com.winlator.core.Callback;
 import com.winlator.math.Mathf;
 import com.winlator.renderer.GPUImage;
@@ -22,10 +24,8 @@ public class Drawable extends XResource {
     private Callback<Drawable> onDestroyListener;
     public final Object renderLock = new Object();
 
-    private boolean blank = true;
-
     static {
-        System.loadLibrary("winlator7");
+        System.loadLibrary("winlator");
     }
 
     public Drawable(int id, int width, int height, Visual visual) {
@@ -39,7 +39,6 @@ public class Drawable extends XResource {
     public static Drawable fromBitmap(Bitmap bitmap) {
         Drawable drawable = new Drawable(0, bitmap.getWidth(), bitmap.getHeight(), null);
         fromBitmap(bitmap, drawable.data);
-        drawable.blank = false;
         return drawable;
     }
 
@@ -60,13 +59,13 @@ public class Drawable extends XResource {
         this.texture = texture;
     }
 
+    @Nullable
     public ByteBuffer getData() {
         return data;
     }
 
     public void setData(ByteBuffer data) {
         this.data = data;
-        this.blank = false;
     }
 
     private short getStride() {
@@ -112,6 +111,7 @@ public class Drawable extends XResource {
 
     public ByteBuffer getImage(short x, short y, short width, short height) {
         ByteBuffer dstData = ByteBuffer.allocateDirect(width * height * 4).order(ByteOrder.LITTLE_ENDIAN);
+        if (this.data == null) return dstData;
 
         x = (short)Mathf.clamp(x, 0, this.width-1);
         y = (short)Mathf.clamp(y, 0, this.height-1);
@@ -130,8 +130,7 @@ public class Drawable extends XResource {
     }
 
     public void copyArea(short srcX, short srcY, short dstX, short dstY, short width, short height, Drawable drawable, GraphicsContext.Function gcFunction) {
-        if (this.data == null || drawable.data == null)
-            return;
+        if (this.data == null || drawable.data == null) return;
 
         dstX = (short)Mathf.clamp(dstX, 0, this.width-1);
         dstY = (short)Mathf.clamp(dstY, 0, this.height-1);
@@ -172,6 +171,7 @@ public class Drawable extends XResource {
     }
 
     public void drawLine(int x0, int y0, int x1, int y1, int color, int lineWidth) {
+        if (this.data == null) return;
         x0 = Mathf.clamp(x0, 0, width-lineWidth);
         y0 = Mathf.clamp(y0, 0, height-lineWidth);
         x1 = Mathf.clamp(x1, 0, width-lineWidth);
@@ -204,10 +204,6 @@ public class Drawable extends XResource {
 
     public void setUseSharedData(boolean useSharedData) {
         this.useSharedData = useSharedData;
-    }
-
-    public boolean isBlank() {
-        return this.blank;
     }
 
     private static native void drawBitmap(short width, short height, ByteBuffer srcData, ByteBuffer dstData);

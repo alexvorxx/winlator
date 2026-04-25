@@ -4,7 +4,7 @@ import androidx.annotation.Keep;
 
 import com.winlator.renderer.GLRenderer;
 import com.winlator.renderer.Texture;
-import com.winlator.xconnector.Client;
+import com.winlator.xconnector.ConnectedClient;
 import com.winlator.xconnector.ConnectionHandler;
 import com.winlator.xconnector.RequestHandler;
 import com.winlator.xconnector.UnixSocketConfig;
@@ -34,20 +34,22 @@ public class VirGLRendererComponent extends EnvironmentComponent implements Conn
     public void start() {
         if (connector != null) return;
         connector = new XConnectorEpoll(socketConfig, this, this);
+        connector.setInitialInputBufferCapacity(0);
+        connector.setInitialOutputBufferCapacity(0);
         connector.start();
     }
 
     @Override
     public void stop() {
         if (connector != null) {
-            connector.stop();
+            connector.destroy();
             connector = null;
         }
     }
 
     @Keep
     private void killConnection(int fd) {
-        connector.killConnection(connector.getClient(fd));
+        connector.killConnection(connector.getClientWidthFd(fd));
     }
 
     @Keep
@@ -74,20 +76,20 @@ public class VirGLRendererComponent extends EnvironmentComponent implements Conn
     }
 
     @Override
-    public void handleConnectionShutdown(Client client) {
+    public void handleConnectionShutdown(ConnectedClient client) {
         long clientPtr = (long)client.getTag();
         destroyClient(clientPtr);
     }
 
     @Override
-    public void handleNewConnection(Client client) {
+    public void handleNewConnection(ConnectedClient client) {
         getSharedEGLContext();
-        long clientPtr = handleNewConnection(client.clientSocket.fd);
+        long clientPtr = handleNewConnection(client.fd);
         client.setTag(clientPtr);
     }
 
     @Override
-    public boolean handleRequest(Client client) throws IOException {
+    public boolean handleRequest(ConnectedClient client) throws IOException {
         long clientPtr = (long)client.getTag();
         handleRequest(clientPtr);
         return true;

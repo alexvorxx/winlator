@@ -2,6 +2,8 @@ package com.winlator.xserver;
 
 import androidx.collection.ArrayMap;
 
+import com.winlator.core.Callback;
+import com.winlator.xconnector.ConnectedClient;
 import com.winlator.xconnector.XInputStream;
 import com.winlator.xconnector.XOutputStream;
 import com.winlator.xserver.events.Event;
@@ -9,7 +11,7 @@ import com.winlator.xserver.events.Event;
 import java.io.IOException;
 import java.util.ArrayList;
 
-public class XClient implements XResourceManager.OnResourceLifecycleListener {
+public class XClient extends ConnectedClient implements XResourceManager.OnResourceLifecycleListener {
     public final XServer xServer;
     private boolean authenticated = false;
     public final Integer resourceIDBase;
@@ -17,15 +19,13 @@ public class XClient implements XResourceManager.OnResourceLifecycleListener {
     private int requestLength;
     private byte requestData;
     private int initialLength;
-    private final XInputStream inputStream;
-    private final XOutputStream outputStream;
     private final ArrayMap<Window, EventListener> eventListeners = new ArrayMap<>();
     private final ArrayList<XResource> resources = new ArrayList<>();
+    private final ArrayList<Callback<XClient>> onDestroyListeners = new ArrayList<>();
 
-    public XClient(XServer xServer, XInputStream inputStream, XOutputStream outputStream) {
+    public XClient(long nativePtr, int fd, XServer xServer) {
+        super(nativePtr, fd);
         this.xServer = xServer;
-        this.inputStream = inputStream;
-        this.outputStream = outputStream;
 
         try (XLock lock = xServer.lockAll()) {
             resourceIDBase = xServer.resourceIDs.get();
@@ -157,5 +157,20 @@ public class XClient implements XResourceManager.OnResourceLifecycleListener {
 
     public boolean isValidResourceId(int id) {
         return xServer.resourceIDs.isInInterval(id, resourceIDBase);
+    }
+
+    public void addOnDestroyListener(Callback<XClient> onDestroyListener) {
+        if (!onDestroyListeners.contains(onDestroyListener)) onDestroyListeners.add(onDestroyListener);
+    }
+
+    public void removeOnWindowModificationListener(Callback<XClient> onDestroyListener) {
+        onDestroyListeners.remove(onDestroyListener);
+    }
+
+    @Override
+    public void destroy() {
+        super.destroy();
+
+        for (Callback<XClient> onDestroyListener : onDestroyListeners) onDestroyListener.call(this);
     }
 }

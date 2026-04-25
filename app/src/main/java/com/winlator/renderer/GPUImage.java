@@ -11,12 +11,12 @@ public class GPUImage extends Texture {
     private long imageKHRPtr;
     private ByteBuffer virtualData;
     private short stride;
-    private static boolean supported = false;
     private boolean locked = false;
     private int nativeHandle;
+    private static boolean supported = false;
 
     static {
-        System.loadLibrary("winlator7");
+        System.loadLibrary("winlator");
     }
 
     public GPUImage(short width, short height) {
@@ -27,16 +27,12 @@ public class GPUImage extends Texture {
         this(width, height, cpuAccess, true);
     }
 
-    public GPUImage(short width, short height, boolean cpuAccess, boolean format) {
-        hardwareBufferPtr = createHardwareBuffer(width, height, cpuAccess, format);
+    public GPUImage(short width, short height, boolean cpuAccess, boolean useHALPixelFormatBGRA8888) {
+        hardwareBufferPtr = createHardwareBuffer(width, height, cpuAccess, useHALPixelFormatBGRA8888);
         if (cpuAccess && hardwareBufferPtr != 0) {
-            lockHardwareBuffer(hardwareBufferPtr);
+            virtualData = lockHardwareBuffer(hardwareBufferPtr);
             locked = true;
         }
-    }
-
-    public long getHardwareBufferPtr() {
-        return hardwareBufferPtr;
     }
 
     @Override
@@ -61,6 +57,15 @@ public class GPUImage extends Texture {
         this.stride = stride;
     }
 
+    public int getNativeHandle() {
+        return nativeHandle;
+    }
+
+    @Keep
+    private void setNativeHandle(int nativeHandle) {
+        this.nativeHandle = nativeHandle;
+    }
+
     public ByteBuffer getVirtualData() {
         return virtualData;
     }
@@ -79,6 +84,10 @@ public class GPUImage extends Texture {
         return supported;
     }
 
+    public long getHardwareBufferPtr() {
+        return hardwareBufferPtr;
+    }
+
     public static void checkIsSupported() {
         final short size = 8;
         GPUImage gpuImage = new GPUImage(size, size);
@@ -87,16 +96,8 @@ public class GPUImage extends Texture {
         gpuImage.destroy();
     }
 
-    @Keep
-    private void setNativeHandle(int nativeHandle) {
-        this.nativeHandle = nativeHandle;
-    }
 
-    public int getNativeHandle() {
-        return nativeHandle;
-    }
-
-    private native long createHardwareBuffer(short width, short height, boolean cpuAccess, boolean format);
+    private native long createHardwareBuffer(short width, short height, boolean cpuAccess, boolean useHALPixelFormatBGRA8888);
 
     private native void destroyHardwareBuffer(long hardwareBufferPtr, boolean locked);
 

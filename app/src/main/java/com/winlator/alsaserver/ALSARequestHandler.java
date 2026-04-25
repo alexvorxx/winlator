@@ -1,7 +1,7 @@
 package com.winlator.alsaserver;
 
 import com.winlator.sysvshm.SysVSharedMemory;
-import com.winlator.xconnector.Client;
+import com.winlator.xconnector.ConnectedClient;
 import com.winlator.xconnector.RequestHandler;
 import com.winlator.xconnector.XConnectorEpoll;
 import com.winlator.xconnector.XInputStream;
@@ -15,7 +15,7 @@ public class ALSARequestHandler implements RequestHandler {
     private int maxSHMemoryId = 0;
 
     @Override
-    public boolean handleRequest(Client client) throws IOException {
+    public boolean handleRequest(ConnectedClient client) throws IOException {
         ALSAClient alsaClient = (ALSAClient)client.getTag();
         XInputStream inputStream = client.getInputStream();
         XOutputStream outputStream = client.getOutputStream();

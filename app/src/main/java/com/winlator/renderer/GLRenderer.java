@@ -8,6 +8,7 @@ import android.opengl.GLSurfaceView;
 
 import com.winlator.R;
 import com.winlator.XrActivity;
+import com.winlator.core.GPUHelper;
 import com.winlator.math.Mathf;
 import com.winlator.math.XForm;
 import com.winlator.renderer.material.CursorMaterial;
@@ -73,6 +74,7 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
 
     @Override
     public void onSurfaceCreated(GL10 gl, EGLConfig config) {
+        GPUHelper.setGlobalEGLContext();
         GPUImage.checkIsSupported();
 
         GLES20.glFrontFace(GLES20.GL_CCW);

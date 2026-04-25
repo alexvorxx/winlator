@@ -9,7 +9,6 @@
 
 #define WHITE 0xffffff
 #define BLACK 0x000000
-#define printf(...) __android_log_print(ANDROID_LOG_DEBUG, "System.out", __VA_ARGS__);
 
 enum GCFunction {GCF_CLEAR, GCF_AND, GCF_AND_REVERSE, GCF_COPY, GCF_AND_INVERTED, GCF_NO_OP, GCF_XOR, GCF_OR, GCF_NOR, GCF_EQUIV, GCF_INVERT, GCF_OR_REVERSE, GCF_COPY_INVERTED, GCF_OR_INVERTED, GCF_NAND, GCF_SET};
 
@@ -94,16 +93,24 @@ Java_com_winlator_xserver_Drawable_copyArea(JNIEnv *env, jclass obj, jshort srcX
                                             jobject dstData) {
     uint8_t *srcDataAddr = (*env)->GetDirectBufferAddress(env, srcData);
     uint8_t *dstDataAddr = (*env)->GetDirectBufferAddress(env, dstData);
-    jlong srcLength = (*env)->GetDirectBufferCapacity(env, srcData);
-    jlong dstLength = (*env)->GetDirectBufferCapacity(env, dstData);
 
-    if (srcX != 0 || srcY != 0 || dstX != 0 || dstY != 0 || srcLength != dstLength) {
-        int copyAmount = width * 4;
+    srcDataAddr += (srcX + srcY * srcStride) * 4;
+    dstDataAddr += (dstX + dstY * dstStride) * 4;
+
+    if (width == srcStride && width == dstStride) {
+        memcpy(dstDataAddr, srcDataAddr, width * height * 4);
+    }
+    else {
+        width *= 4;
+        srcStride *= 4;
+        dstStride *= 4;
+
         for (int16_t y = 0; y < height; y++) {
-            memcpy(dstDataAddr + (dstX + (y + dstY) * dstStride) * 4, srcDataAddr + (srcX + (y + srcY) * srcStride) * 4, copyAmount);
+            memcpy(dstDataAddr, srcDataAddr, width);
+            srcDataAddr += srcStride;
+            dstDataAddr += dstStride;
         }
     }
-    else memcpy(dstDataAddr, srcDataAddr, dstLength);
 }
 
 JNIEXPORT void JNICALL
@@ -112,15 +119,16 @@ Java_com_winlator_xserver_Drawable_copyAreaOp(JNIEnv *env, jclass obj, jshort sr
                                               jshort width, jshort height, jshort srcStride,
                                               jshort dstStride, jobject srcData,
                                               jobject dstData, int gcFunction) {
+    int i, j, srcColor, dstColor;
     uint8_t *srcDataAddr = (*env)->GetDirectBufferAddress(env, srcData);
     uint8_t *dstDataAddr = (*env)->GetDirectBufferAddress(env, dstData);
 
-    for (int16_t y = 0; y < height; y++) {
-        for (int16_t x = 0; x < width; x++) {
-            int i = (x + srcX + (y + srcY) * srcStride) * 4;
-            int j = (x + dstX + (y + dstY) * dstStride) * 4;
-            int srcColor = (srcDataAddr[i+0] << 16) | (srcDataAddr[i+1] << 8) | srcDataAddr[i+2];
-            int dstColor = (dstDataAddr[j+0] << 16) | (dstDataAddr[j+1] << 8) | dstDataAddr[j+2];
+    for (int16_t x, y = 0; y < height; y++) {
+        for (x = 0; x < width; x++) {
+            i = (x + srcX + (y + srcY) * srcStride) * 4;
+            j = (x + dstX + (y + dstY) * dstStride) * 4;
+            srcColor = (srcDataAddr[i+0] << 16) | (srcDataAddr[i+1] << 8) | srcDataAddr[i+2];
+            dstColor = (dstDataAddr[j+0] << 16) | (dstDataAddr[j+1] << 8) | dstDataAddr[j+2];
 
             dstColor = setPixelOp(srcColor, dstColor, gcFunction);
 

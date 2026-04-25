@@ -9,7 +9,7 @@ import com.winlator.core.KeyValueSet;
 import com.winlator.renderer.GPUImage;
 import com.winlator.renderer.Texture;
 import com.winlator.widget.XServerView;
-import com.winlator.xconnector.Client;
+import com.winlator.xconnector.ConnectedClient;
 import com.winlator.xconnector.ConnectionHandler;
 import com.winlator.xconnector.RequestHandler;
 import com.winlator.xconnector.UnixSocketConfig;
@@ -100,7 +100,7 @@ public class VortekRendererComponent extends EnvironmentComponent implements Con
 
   public void stop() {
     if (connector != null) {
-      connector.stop();
+      connector.destroy();
       connector = null;
     }
   }
@@ -156,23 +156,21 @@ public class VortekRendererComponent extends EnvironmentComponent implements Con
     }
   }
   
-  public void handleConnectionShutdown(Client client) {
+  public void handleConnectionShutdown(ConnectedClient client) {
     if (client.getTag() != null)
       destroyVkContext((Long) client.getTag());
   }
   
-  public void handleNewConnection(Client client) {
-    client.createIOStreams();
-  }
+  public void handleNewConnection(ConnectedClient client) { }
   
-  public boolean handleRequest(Client client) throws IOException {
+  public boolean handleRequest(ConnectedClient client) throws IOException {
     XInputStream inputStream = client.getInputStream();
     if (inputStream.available() < 8) return false;
     int requestCode = inputStream.readInt();
     int requestLength = inputStream.readInt();
 
     if (requestCode == REQUEST_CODE_CREATE_CONTEXT) {
-      long contextPtr = createVkContext(client.clientSocket.fd, options);
+      long contextPtr = createVkContext(client.fd, options);
       if (contextPtr > 0) {
         client.setTag(contextPtr);
       } else {

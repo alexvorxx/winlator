@@ -25,7 +25,7 @@ public class ALSAServerComponent extends EnvironmentComponent {
     @Override
     public void stop() {
         if (connector != null) {
-            connector.stop();
+            connector.destroy();
             connector = null;
         }
     }

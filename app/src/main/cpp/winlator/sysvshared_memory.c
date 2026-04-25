@@ -12,13 +12,17 @@
 #include <sys/syscall.h>
 #include <jni.h>
 #include <android/log.h>
+#include <android/sharedmem.h>
 
 #define __u32 uint32_t
 #include <linux/ashmem.h>
 
-#define printf(...) __android_log_print(ANDROID_LOG_DEBUG, "System.out", __VA_ARGS__);
-
-static int ashmemCreateRegion(const char* name, int64_t size) {
+int ashmemCreateRegion(const char* name, int64_t size) {
+#if __ANDROID_API__ >= 26
+    int fd = ASharedMemory_create(name, size);
+    if (fd < 0) return -1;
+    return fd;
+#else
     int fd = open("/dev/ashmem", O_RDWR);
     if (fd < 0) return -1;
 
@@ -36,6 +40,7 @@ static int ashmemCreateRegion(const char* name, int64_t size) {
 error:
     close(fd);
     return -1;
+#endif
 }
 
 static int memfd_create(const char *name, unsigned int flags) {
@@ -44,6 +49,19 @@ static int memfd_create(const char *name, unsigned int flags) {
 #else
     return -1;
 #endif
+}
+
+int createMemoryFd(const char* name, int64_t size) {
+    int fd = memfd_create(name, MFD_ALLOW_SEALING);
+    if (fd < 0) return -1;
+
+    int res = ftruncate(fd, size);
+    if (res < 0) {
+        close(fd);
+        return -1;
+    }
+
+    return fd;
 }
 
 JNIEXPORT jint JNICALL
@@ -73,16 +91,9 @@ Java_com_winlator_sysvshm_SysVSharedMemory_createMemoryFd(JNIEnv *env, jclass ob
                                                           jint size) {
     const char *namePtr = (*env)->GetStringUTFChars(env, name, 0);
 
-    int fd = memfd_create(namePtr, MFD_ALLOW_SEALING);
+    int fd = createMemoryFd(namePtr, size);
     (*env)->ReleaseStringUTFChars(env, name, namePtr);
-
     if (fd < 0) return -1;
-
-    int res = ftruncate(fd, size);
-    if (res < 0) {
-        close(fd);
-        return -1;
-    }
 
     return fd;
 }

@@ -1487,23 +1487,23 @@ public class X11Activity extends AppCompatActivity implements View.OnApplyWindow
         }
 
         environment = new XEnvironment(this, imageFs);
-        environment.addComponent(new SysVSharedMemoryComponent(xServer, UnixSocketConfig.createSocket(rootPath, UnixSocketConfig.SYSVSHM_SERVER_PATH)));
-        environment.addComponent(new XServerComponent(xServer, UnixSocketConfig.createSocket(rootPath, UnixSocketConfig.XSERVER_PATH)));
+        environment.addComponent(new SysVSharedMemoryComponent(xServer, UnixSocketConfig.create(rootPath, UnixSocketConfig.SYSVSHM_SERVER_PATH)));
+        environment.addComponent(new XServerComponent(xServer, UnixSocketConfig.create(rootPath, UnixSocketConfig.XSERVER_PATH)));
         environment.addComponent(new NetworkInfoUpdateComponent());
 
         if (audioDriver.equals("alsa")) {
             envVars.put("ANDROID_ALSA_SERVER", imageFs.getRootDir().getPath() + UnixSocketConfig.ALSA_SERVER_PATH);
             envVars.put("ANDROID_ASERVER_USE_SHM", "true");
-            environment.addComponent(new ALSAServerComponent(UnixSocketConfig.createSocket(rootPath, UnixSocketConfig.ALSA_SERVER_PATH)));
+            environment.addComponent(new ALSAServerComponent(UnixSocketConfig.create(rootPath, UnixSocketConfig.ALSA_SERVER_PATH)));
         }
         else if (audioDriver.equals("pulseaudio")) {
             envVars.put("PULSE_SERVER", imageFs.getRootDir().getPath() + UnixSocketConfig.PULSE_SERVER_PATH);
-            environment.addComponent(new PulseAudioComponent(UnixSocketConfig.createSocket(rootPath, UnixSocketConfig.PULSE_SERVER_PATH)));
+            environment.addComponent(new PulseAudioComponent(UnixSocketConfig.create(rootPath, UnixSocketConfig.PULSE_SERVER_PATH)));
         }
 
         if (graphicsDriver.startsWith("virgl")) {
             if (!useOldVirGL) {
-                environment.addComponent(new VirGLRendererComponent(xServer, UnixSocketConfig.createSocket(rootPath, UnixSocketConfig.VIRGL_SERVER_PATH)));
+                environment.addComponent(new VirGLRendererComponent(xServer, UnixSocketConfig.create(rootPath, UnixSocketConfig.VIRGL_SERVER_PATH)));
             }
             else {
                 startVirGLTestServer(this);
@@ -1512,7 +1512,7 @@ public class X11Activity extends AppCompatActivity implements View.OnApplyWindow
         else if (graphicsDriver.startsWith("vortek")) {
             VortekRendererComponent.Options options = VortekRendererComponent.Options.fromKeyValueSet(this.graphicsDriverConfig);
             environment.addComponent(new VortekRendererComponent(xServer,
-                    UnixSocketConfig.createSocket(rootPath, UnixSocketConfig.VORTEK_SERVER_PATH),
+                    UnixSocketConfig.create(rootPath, UnixSocketConfig.VORTEK_SERVER_PATH),
                     options, getApplicationInfo().nativeLibraryDir));
         }
 

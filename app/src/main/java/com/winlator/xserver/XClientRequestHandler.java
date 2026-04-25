@@ -2,7 +2,7 @@ package com.winlator.xserver;
 
 import android.util.Log;
 
-import com.winlator.xconnector.Client;
+import com.winlator.xconnector.ConnectedClient;
 import com.winlator.xconnector.RequestHandler;
 import com.winlator.xconnector.XInputStream;
 import com.winlator.xconnector.XOutputStream;
@@ -30,8 +30,8 @@ public class XClientRequestHandler implements RequestHandler {
     public static final int MAX_REQUEST_LENGTH = 65535;
 
     @Override
-    public boolean handleRequest(Client client) throws IOException {
-        XClient xClient = (XClient)client.getTag();
+    public boolean handleRequest(ConnectedClient client) throws IOException {
+        XClient xClient = (XClient)client;
         XInputStream inputStream = client.getInputStream();
         XOutputStream outputStream = client.getOutputStream();
 
@@ -126,18 +126,7 @@ public class XClientRequestHandler implements RequestHandler {
 
     private boolean handleAuthRequest(XClient client, XInputStream inputStream, XOutputStream outputStream) throws IOException {
         if (inputStream.available() < 12) return false;
-
-        byte byteOrder = inputStream.readByte();
-        if (byteOrder == 66) {
-            inputStream.setByteOrder(ByteOrder.BIG_ENDIAN);
-            outputStream.setByteOrder(ByteOrder.BIG_ENDIAN);
-        }
-        else if (byteOrder == 108) {
-            inputStream.setByteOrder(ByteOrder.LITTLE_ENDIAN);
-            outputStream.setByteOrder(ByteOrder.LITTLE_ENDIAN);
-        }
-
-        inputStream.skip(1);
+        inputStream.skip(2);
 
         short majorVersion = inputStream.readShort();
         if (majorVersion != 11) throw new UnsupportedOperationException("Unsupported major X protocol version "+majorVersion+".");

@@ -11,10 +11,20 @@
 #include <GLES2/gl2ext.h>
 #include <jni.h>
 #include <string.h>
+#include <stdbool.h>
+#include <sys/mman.h>
 
-#define printf(...) __android_log_print(ANDROID_LOG_DEBUG, "System.out", __VA_ARGS__);
-#define HAL_PIXEL_FORMAT_RGBA_8888 1
+#include "native_handle.h"
+#include "winlator.h"
+
 #define HAL_PIXEL_FORMAT_BGRA_8888 5
+
+extern const native_handle_t* _Nullable AHardwareBuffer_getNativeHandle(const AHardwareBuffer* _Nonnull buffer);
+
+int AHardwareBuffer_getFd(AHardwareBuffer* hardwareBuffer) {
+    const native_handle_t* nativeHandle = AHardwareBuffer_getNativeHandle(hardwareBuffer);
+    return nativeHandle->numFds > 0 ? nativeHandle->data[0] : -1;
+}
 
 EGLImageKHR createImageKHR(AHardwareBuffer* hardwareBuffer, int textureId) {
     const EGLint attribList[] = {EGL_IMAGE_PRESERVED_KHR, EGL_TRUE, EGL_NONE};
@@ -35,15 +45,15 @@ EGLImageKHR createImageKHR(AHardwareBuffer* hardwareBuffer, int textureId) {
     return imageKHR;
 }
 
-AHardwareBuffer* createHardwareBuffer(int width, int height, bool cpuAccess, bool format) {
+AHardwareBuffer* createHardwareBuffer(int width, int height, bool cpuAccess, bool useHALPixelFormatBGRA8888) {
     AHardwareBuffer_Desc buffDesc = {0};
     buffDesc.width = width;
     buffDesc.height = height;
     buffDesc.layers = 1;
     buffDesc.usage = cpuAccess ? AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN : AHARDWAREBUFFER_USAGE_GPU_COLOR_OUTPUT;
-    buffDesc.format = format ? HAL_PIXEL_FORMAT_BGRA_8888 : HAL_PIXEL_FORMAT_RGBA_8888;
+    buffDesc.format = useHALPixelFormatBGRA8888 ? HAL_PIXEL_FORMAT_BGRA_8888 : AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM;
 
-    AHardwareBuffer *hardwareBuffer = NULL;
+    AHardwareBuffer* hardwareBuffer = NULL;
     AHardwareBuffer_allocate(&buffDesc, &hardwareBuffer);
 
     return hardwareBuffer;
@@ -51,8 +61,24 @@ AHardwareBuffer* createHardwareBuffer(int width, int height, bool cpuAccess, boo
 
 JNIEXPORT jlong JNICALL
 Java_com_winlator_renderer_GPUImage_createHardwareBuffer(JNIEnv *env, jclass obj, jshort width,
-                                                         jshort height, jboolean cpuAccess, jboolean format) {
-    return (jlong)createHardwareBuffer(width, height, cpuAccess, format);
+                                                         jshort height, jboolean cpuAccess, jboolean useHALPixelFormatBGRA8888) {
+    AHardwareBuffer* hardwareBuffer = createHardwareBuffer(width, height, cpuAccess, useHALPixelFormatBGRA8888);
+    if (hardwareBuffer) {
+        jclass cls = (*env)->GetObjectClass(env, obj);
+
+        AHardwareBuffer_Desc buffDesc = {0};
+        AHardwareBuffer_describe(hardwareBuffer, &buffDesc);
+
+        jmethodID setStride = (*env)->GetMethodID(env, cls, "setStride", "(S)V");
+        (*env)->CallVoidMethod(env, obj, setStride, (jshort)buffDesc.stride);
+
+        int fd = AHardwareBuffer_getFd(hardwareBuffer);
+        if (fd != -1) {
+            jmethodID setNativeHandle = (*env)->GetMethodID(env, cls, "setNativeHandle", "(I)V");
+            (*env)->CallVoidMethod(env, obj, setNativeHandle, fd);
+        }
+    }
+    return (jlong)hardwareBuffer;
 }
 
 JNIEXPORT jlong JNICALL
@@ -81,12 +107,8 @@ Java_com_winlator_renderer_GPUImage_lockHardwareBuffer(JNIEnv *env, jclass obj,
     void *virtualAddr;
     AHardwareBuffer_lock(hardwareBuffer, AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN, -1, NULL, &virtualAddr);
 
-    AHardwareBuffer_Desc buffDesc;
+    AHardwareBuffer_Desc buffDesc = {0};
     AHardwareBuffer_describe(hardwareBuffer, &buffDesc);
-
-    jclass cls = (*env)->GetObjectClass(env, obj);
-    jmethodID setStride = (*env)->GetMethodID(env, cls, "setStride", "(S)V");
-    (*env)->CallVoidMethod(env, obj, setStride, (jshort)buffDesc.stride);
 
     jlong size = buffDesc.stride * buffDesc.height * 4;
     return (*env)->NewDirectByteBuffer(env, virtualAddr, size);
