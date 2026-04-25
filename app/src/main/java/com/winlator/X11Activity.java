@@ -65,6 +65,7 @@ import com.winlator.container.Shortcut;
 import com.winlator.contentdialog.ContentDialog;
 import com.winlator.contentdialog.DXVK_VKD3DConfigDialog;
 import com.winlator.contentdialog.DebugDialog;
+import com.winlator.contentdialog.FreedrenoConfigDialog;
 import com.winlator.contentdialog.NavigationDialog;
 import com.winlator.contentdialog.TurnipConfigDialog;
 import com.winlator.contentdialog.VirGLConfigDialog;
@@ -1313,6 +1314,7 @@ public class X11Activity extends AppCompatActivity implements View.OnApplyWindow
             FileUtils.delete(new File(imageFs.getLib64Dir(), "libvulkan_lvp.so"));
             FileUtils.delete(new File(imageFs.getLib64Dir(), "libvulkan_vortek.so"));
             FileUtils.delete(new File(imageFs.getLib64Dir(), "libGL.so.1"));
+            FileUtils.delete(new File(imageFs.getLib64Dir(), "libgallium-" + DefaultVersion.FREEDRENO + ".so"));
             container.putExtra("graphicsDriver", graphicsDriver);
             container.putExtra("useOldVirGL", useOldVirGL);
             container.saveData();
@@ -1388,7 +1390,7 @@ public class X11Activity extends AppCompatActivity implements View.OnApplyWindow
         else if (graphicsDriver.startsWith("freedreno")) {
             envVars.put("GALLIUM_DRIVER", "freedreno");
             envVars.put("MESA_LOADER_DRIVER_OVERRIDE", "kgsl");
-            envVars.put("vblank_mode", "0");
+            FreedrenoConfigDialog.setEnvVars(graphicsDriverConfig, envVars);
 
             if (changed) {
                 TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/freedreno-" + DefaultVersion.FREEDRENO + ".tzst", rootDir);
