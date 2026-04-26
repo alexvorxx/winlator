@@ -110,15 +110,12 @@ public class Texture {
         return textureId;
     }
 
-    public void copyFromFramebuffer(int framebuffer, short width, short height) {
+    public void copyFromReadBuffer(short width, short height) {
         if (!isAllocated()) allocateTexture(width, height, null);
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, framebuffer);
-        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureId);
         GLES20.glCopyTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA, 0, 0, width, height, 0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
-        if (XrActivity.isEnabled(null)) XrActivity.getInstance().bindFramebuffer();
+        GLES20.glFlush();
     }
 
     public void destroy() {

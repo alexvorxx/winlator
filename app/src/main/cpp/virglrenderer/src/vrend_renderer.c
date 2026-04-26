@@ -6257,7 +6257,7 @@ static void vrend_renderer_blit_int(struct vrend_context *ctx,
       use_gl = true;
 
    if (vrend_blit_needs_swizzle(info->dst.format, info->src.format)) {
-      use_gl = true;
+      use_gl = false;
 
       if (dst_res->base.bind & VIRGL_BIND_PREFER_EMULATED_BGRA)
          skip_dest_swizzle = true;
