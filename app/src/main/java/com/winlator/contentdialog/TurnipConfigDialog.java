@@ -45,13 +45,13 @@ public class TurnipConfigDialog extends ContentDialog {
 
         KeyValueSet config = parseConfig(context, anchor.getTag());
         AppUtils.setSpinnerSelectionFromIdentifier(sVersion, config.get("version", DefaultVersion.TURNIP));
-        AppUtils.setSpinnerSelectionFromNumber(sMaxDeviceMemory, config.get("maxDeviceMemory", "4096"));
+        AppUtils.setSpinnerSelectionFromNumber(sMaxDeviceMemory, config.get("maxTurnipMemory", "4096"));
         AppUtils.setSpinnerSelectionFromIdentifier(sPresentMode, config.get("presentMode", "mailbox"));
         loadDebugOptions(config.get("tuDebug", "noconform"));
 
         setOnConfirmCallback(() -> {
             config.put("version", sVersion.getSelectedItem().toString());
-            config.put("maxDeviceMemory", StringUtils.parseNumber(sMaxDeviceMemory.getSelectedItem()));
+            config.put("maxTurnipMemory", StringUtils.parseNumber(sMaxDeviceMemory.getSelectedItem()));
             config.put("presentMode", sPresentMode.getSelectedItem().toString());
             config.put("tuDebug", getDebugOptions());
             anchor.setTag(config.toString());
@@ -59,7 +59,7 @@ public class TurnipConfigDialog extends ContentDialog {
     }
 
     private static String getDefaultConfig(Context context) {
-        return "version="+DefaultVersion.TURNIP+",tuDebug=noconform,maxDeviceMemory=4096,presentMode=mailbox";
+        return "version="+DefaultVersion.TURNIP+",tuDebug=noconform,maxTurnipMemory=4096,presentMode=mailbox";
     }
 
     private String getDebugOptions() {
@@ -98,7 +98,7 @@ public class TurnipConfigDialog extends ContentDialog {
     public static void setEnvVars(KeyValueSet config, EnvVars envVars) {
         String options = config.get("tuDebug");
         if (!options.isEmpty()) envVars.put("TU_DEBUG", options.replace("|", ","));
-        envVars.put("TU_OVERRIDE_HEAP_SIZE", config.get("maxDeviceMemory"));
+        envVars.put("TU_OVERRIDE_HEAP_SIZE", config.get("maxTurnipMemory"));
         envVars.put("MESA_VK_WSI_PRESENT_MODE", config.get("presentMode"));
     }
 

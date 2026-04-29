@@ -30,7 +30,7 @@ public class GPUImage extends Texture {
     public GPUImage(short width, short height, boolean cpuAccess, boolean useHALPixelFormatBGRA8888) {
         hardwareBufferPtr = createHardwareBuffer(width, height, cpuAccess, useHALPixelFormatBGRA8888);
         if (cpuAccess && hardwareBufferPtr != 0) {
-            virtualData = lockHardwareBuffer(hardwareBufferPtr);
+            lockHardwareBuffer(hardwareBufferPtr);
             locked = true;
         }
     }
