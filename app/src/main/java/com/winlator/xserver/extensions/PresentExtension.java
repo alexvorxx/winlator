@@ -9,7 +9,7 @@ import com.winlator.renderer.Texture;
 import com.winlator.xconnector.XInputStream;
 import com.winlator.xconnector.XOutputStream;
 import com.winlator.xconnector.XStreamLock;
-import com.winlator.xserver.Bitmask;
+import com.winlator.core.Bitmask;
 import com.winlator.xserver.Drawable;
 import com.winlator.xserver.Pixmap;
 import com.winlator.xserver.Window;
@@ -74,7 +74,7 @@ public class PresentExtension implements Extension {
             for (int i = 0; i < events.size(); i++) {
                 Event event = events.valueAt(i);
                 if (event.window == window && event.mask.isSet(PresentIdleNotify.getEventMask())) {
-                    event.client.sendEvent(new PresentIdleNotify(event.id, window, pixmap, serial, idleFence));
+                    event.client.sendEvent(new PresentIdleNotify(this, event.id, window, pixmap, serial, idleFence));
                 }
             }
         }
@@ -85,7 +85,7 @@ public class PresentExtension implements Extension {
             for (int i = 0; i < events.size(); i++) {
                 Event event = events.valueAt(i);
                 if (event.window == window && event.mask.isSet(PresentCompleteNotify.getEventMask())) {
-                    event.client.sendEvent(new PresentCompleteNotify(event.id, window, serial, kind, mode, ust, msc));
+                    event.client.sendEvent(new PresentCompleteNotify(this, event.id, window, serial, kind, mode, ust, msc));
                 }
             }
         }

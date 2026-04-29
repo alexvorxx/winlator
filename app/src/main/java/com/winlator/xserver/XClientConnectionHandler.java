@@ -16,7 +16,7 @@ public class XClientConnectionHandler implements ConnectionHandler {
     }
 
     @Override
-    public void handleNewConnection(ConnectedClient client) { }
+    public void handleNewConnection(ConnectedClient client) {}
 
     @Override
     public void handleConnectionShutdown(ConnectedClient client) {

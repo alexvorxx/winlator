@@ -2,6 +2,7 @@ package com.winlator.xserver;
 
 import android.util.SparseArray;
 
+import com.winlator.core.Bitmask;
 import com.winlator.xconnector.XInputStream;
 import com.winlator.xserver.errors.BadIdChoice;
 import com.winlator.xserver.errors.BadMatch;
@@ -298,13 +299,17 @@ public class WindowManager extends XResourceManager {
     }
 
     public Window findPointWindow(short rootX, short rootY) {
-        return findPointWindow(rootWindow, rootX, rootY);
+        return findPointWindow(rootWindow, rootX, rootY, false);
     }
 
-    private Window findPointWindow(Window window, short rootX, short rootY) {
-        if (!(window.attributes.isMapped() && window.containsPoint(rootX, rootY))) return null;
-        Window child = window.getChildByCoords(rootX, rootY);
-        return child != null ? findPointWindow(child, rootX, rootY) : window;
+    public Window findPointWindow(short rootX, short rootY, boolean useFullscreenTransformation) {
+        return findPointWindow(rootWindow, rootX, rootY, useFullscreenTransformation);
+    }
+
+    private Window findPointWindow(Window window, short rootX, short rootY, boolean useFullscreenTransformation) {
+        if (!(window.attributes.isMapped() && window.containsPoint(rootX, rootY, useFullscreenTransformation))) return null;
+        Window child = window.getChildByCoords(rootX, rootY, useFullscreenTransformation);
+        return child != null ? findPointWindow(child, rootX, rootY, useFullscreenTransformation) : window;
     }
 
     public void addOnWindowModificationListener(OnWindowModificationListener onWindowModificationListener) {

@@ -2,6 +2,7 @@ package com.winlator.xserver;
 
 import androidx.collection.ArrayMap;
 
+import com.winlator.core.Bitmask;
 import com.winlator.core.Callback;
 import com.winlator.xconnector.ConnectedClient;
 import com.winlator.xconnector.XInputStream;

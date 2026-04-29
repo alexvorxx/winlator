@@ -3,6 +3,8 @@ package com.winlator.xserver;
 import android.util.ArrayMap;
 import android.util.SparseArray;
 
+import com.winlator.core.Bitmask;
+import com.winlator.renderer.FullscreenTransformation;
 import com.winlator.xserver.events.Event;
 import com.winlator.xserver.events.PropertyNotify;
 
@@ -12,7 +14,7 @@ import java.util.List;
 import java.util.Stack;
 
 public class Window extends XResource {
-    public static final int FLAG_X = 1;
+    public static final int FLAG_X = 1<<0;
     public static final int FLAG_Y = 1<<1;
     public static final int FLAG_WIDTH = 1<<2;
     public static final int FLAG_HEIGHT = 1<<3;
@@ -37,6 +39,7 @@ public class Window extends XResource {
     private final ArrayList<Window> children = new ArrayList<>();
     private final List<Window> immutableChildren = Collections.unmodifiableList(children);
     private final ArrayList<EventListener> eventListeners = new ArrayList<>();
+    private FullscreenTransformation fullscreenTransformation;
 
     public Window(int id, Drawable content, int x, int y, int width, int height, XClient originClient) {
         super(id);
@@ -124,10 +127,6 @@ public class Window extends XResource {
         return parent;
     }
 
-    public void setParent(Window parent) {
-        this.parent = parent;
-    }
-
     public Property getProperty(int id) {
         return properties.get(id);
     }
@@ -173,37 +172,37 @@ public class Window extends XResource {
     }
 
     public String getName() {
-        Property property = getProperty(Atom.getId("WM_NAME"));
+        Property property = getProperty(Atom.WM_NAME);
         return property != null ? property.toString() : "";
     }
 
     public String getClassName() {
-        Property property = getProperty(Atom.getId("WM_CLASS"));
+        Property property = getProperty(Atom.WM_CLASS);
         return property != null ? property.toString() : "";
     }
 
     public int getWMHintsValue(WMHints wmHints) {
-        Property property = getProperty(Atom.getId("WM_HINTS"));
+        Property property = getProperty(Atom.WM_HINTS);
         return property != null ? property.getInt(wmHints.ordinal()) : 0;
     }
 
     public int getProcessId() {
-        Property property = getProperty(Atom.getId("_NET_WM_PID"));
+        Property property = getProperty(Atom._NET_WM_PID);
         return property != null ? property.getInt(0) : 0;
     }
 
     public int getTransientFor() {
-        Property property = getProperty(Atom.getId("WM_TRANSIENT_FOR"));
+        Property property = getProperty(Atom.WM_TRANSIENT_FOR);
         return property != null ? property.getInt(0) : 0;
     }
 
     public boolean isWoW64() {
-        Property property = getProperty(Atom.getId("_NET_WM_WOW64"));
+        Property property = getProperty(Atom._NET_WM_WOW64);
         return property != null && property.data.get(0) == 1;
     }
 
     public boolean isSurface() {
-        Property property = getProperty(Atom.getId("_NET_WM_SURFACE"));
+        Property property = getProperty(Atom._NET_WM_SURFACE);
         return property != null && property.data.get(0) == 1;
     }
 
@@ -216,7 +215,7 @@ public class Window extends XResource {
     }
 
     public Bitmask getDecorations() {
-        Property property = getProperty(Atom.getId("_MOTIF_WM_HINTS"));
+        Property property = getProperty(Atom._MOTIF_WM_HINTS);
         return new Bitmask(property != null ? property.getInt(2) : 0);
     }
 
@@ -229,12 +228,12 @@ public class Window extends XResource {
     }
 
     public Type getType() {
-        Property property = getProperty(Atom.getId("_NET_WM_WINDOW_TYPE"));
+        Property property = getProperty(Atom._NET_WM_WINDOW_TYPE);
         return property != null && property.toString().equals("_NET_WM_WINDOW_TYPE_DIALOG") ? Type.DIALOG : Type.NORMAL;
     }
 
     public long getHandle() {
-        Property property = getProperty(Atom.getId("_NET_WM_HWND"));
+        Property property = getProperty(Atom._NET_WM_HWND);
         return property != null ? property.getLong(0) : 0;
     }
 
@@ -262,7 +261,13 @@ public class Window extends XResource {
     public Window previousSibling() {
         if (parent == null) return null;
         int index = parent.children.indexOf(this);
-        return index > 0 ? parent.children.get(index - 1) : null;
+        return index > 0 ? parent.children.get(index-1) : null;
+    }
+
+    public Window nextSibling() {
+        if (parent == null) return null;
+        int index = parent.children.indexOf(this);
+        return index >= 0 && (index+1) < parent.children.size() ? parent.children.get(index+1) : null;
     }
 
     public void moveChildAbove(Window child, Window sibling) {
@@ -352,45 +357,67 @@ public class Window extends XResource {
     }
 
     public boolean containsPoint(short rootX, short rootY) {
-        short[] localPoint = rootPointToLocal(rootX, rootY);
-        return localPoint[0] >= 0 && localPoint[1] >= 0 && localPoint[0] < width && localPoint[1] < height;
+        return containsPoint(rootX, rootY, false);
+    }
+
+    public boolean containsPoint(short rootX, short rootY, boolean useFullscreenTransformation) {
+        short[] localPoint = rootPointToLocal(rootX, rootY, useFullscreenTransformation);
+        short width = fullscreenTransformation != null && useFullscreenTransformation ? fullscreenTransformation.width : this.width;
+        short height = fullscreenTransformation != null && useFullscreenTransformation ? fullscreenTransformation.height : this.height;
+        return localPoint[0] >= 0 && localPoint[1] >= 0 && localPoint[0] <= width && localPoint[1] <= height;
     }
 
     public short[] rootPointToLocal(short x, short y) {
+        return rootPointToLocal(x, y, false);
+    }
+
+    public short[] rootPointToLocal(short x, short y, boolean useFullscreenTransformation) {
         Window window = this;
         while (window != null) {
-            x -= window.x;
-            y -= window.y;
+            x -= window.fullscreenTransformation != null && useFullscreenTransformation ? window.fullscreenTransformation.x : window.x;
+            y -= window.fullscreenTransformation != null && useFullscreenTransformation ? window.fullscreenTransformation.y : window.y;
             window = window.parent;
         }
         return new short[]{x, y};
     }
 
     public short[] localPointToRoot(short x, short y) {
+        return localPointToRoot(x, y, false);
+    }
+
+    public short[] localPointToRoot(short x, short y, boolean useFullscreenTransformation) {
         Window window = this;
         while (window != null) {
-            x += window.x;
-            y += window.y;
+            x += window.fullscreenTransformation != null && useFullscreenTransformation ? window.fullscreenTransformation.x : window.x;
+            y += window.fullscreenTransformation != null && useFullscreenTransformation ? window.fullscreenTransformation.y : window.y;
             window = window.parent;
         }
         return new short[]{x, y};
     }
 
     public short getRootX() {
-        short rootX = x;
+        return getRootX(false);
+    }
+
+    public short getRootX(boolean useFullscreenTransformation) {
+        short rootX = fullscreenTransformation != null && useFullscreenTransformation ? fullscreenTransformation.x : x;
         Window window = parent;
         while (window != null) {
-            rootX += window.x;
+            rootX += window.fullscreenTransformation != null && useFullscreenTransformation ? window.fullscreenTransformation.x : window.x;
             window = window.parent;
         }
         return rootX;
     }
 
     public short getRootY() {
-        short rootY = y;
+        return getRootY(false);
+    }
+
+    public short getRootY(boolean useFullscreenTransformation) {
+        short rootY = fullscreenTransformation != null && useFullscreenTransformation ? fullscreenTransformation.y : y;
         Window window = parent;
         while (window != null) {
-            rootY += window.y;
+            rootY += window.fullscreenTransformation != null && useFullscreenTransformation ? window.fullscreenTransformation.y : window.y;
             window = window.parent;
         }
         return rootY;
@@ -430,9 +457,13 @@ public class Window extends XResource {
     }
 
     public Window getChildByCoords(short x, short y) {
+        return getChildByCoords(x, y, false);
+    }
+
+    public Window getChildByCoords(short x, short y, boolean useFullscreenTransformation) {
         for (int i = children.size()-1; i >= 0; i--) {
             Window child = children.get(i);
-            if (child.attributes.isMapped() && child.containsPoint(x, y)) return child;
+            if (child.attributes.isMapped() && child.containsPoint(x, y, useFullscreenTransformation)) return child;
         }
         return null;
     }
@@ -471,13 +502,21 @@ public class Window extends XResource {
         }
     }
 
-    public String serializeProperties() {
+    public String stringifyProperties() {
         String result = "";
         for (int i = 0; i < properties.size(); i++) {
             Property property = properties.valueAt(i);
             result += property.nameAsString()+"="+property+"\n";
         }
         return result;
+    }
+
+    public FullscreenTransformation getFullscreenTransformation() {
+        return fullscreenTransformation;
+    }
+
+    public void setFullscreenTransformation(FullscreenTransformation fullscreenTransformation) {
+        this.fullscreenTransformation = fullscreenTransformation;
     }
 
     public boolean isIconic() {

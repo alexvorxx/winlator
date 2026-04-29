@@ -521,4 +521,9 @@
     <string name="install_drivers_message">Сейчас Вам будет предложено выбрать драйвер. Он должен быть таким же, как и в других эмуляторах (Yuzu, Dolphin, Citra, и т.д.).</string>
     <string name="install_drivers_warning">Имейте в виду, что из-за ограничений современных эмуляторов драйверы Qualcomm могут не работать на чипсетах ниже 8 Gen2 без патчей.</string>
     <string name="adrenotools_gpu_drivers">Драйверы GPU Adrenotools</string>
+
+    <string name="voltage">Напряжение</string>
+    <string name="current">Ток</string>
+    <string name="capacity">Емкость</string>
+    <string name="battery">Батарея</string>
 </resources>

@@ -6,6 +6,7 @@ import androidx.collection.ArraySet;
 import androidx.core.view.PointerIconCompat;
 import androidx.recyclerview.widget.ItemTouchHelper;
 
+import com.winlator.core.Bitmask;
 import com.winlator.inputcontrols.ExternalController;
 
 import org.apache.commons.compress.archivers.tar.TarConstants;

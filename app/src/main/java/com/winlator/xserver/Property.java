@@ -32,6 +32,7 @@ public class Property {
     public final int type;
     public final Format format;
     public ByteBuffer data;
+    private String cachedString;
 
     public Property(int name, int type, Format format, byte[] data) {
         this.name = name;
@@ -41,14 +42,17 @@ public class Property {
     }
 
     public void replace(byte[] data) {
+        cachedString = null;
         this.data = ByteBuffer.wrap(data != null ? data : new byte[0]).order(ByteOrder.LITTLE_ENDIAN);
     }
 
     public void prepend(byte[] values) {
+        cachedString = null;
         replace(ArrayUtils.concat(values, this.data.array()));
     }
 
     public void append(byte[] values) {
+        cachedString = null;
         replace(ArrayUtils.concat(this.data.array(), values));
     }
 
@@ -59,9 +63,13 @@ public class Property {
         data.rewind();
         switch (type) {
             case "UTF8_STRING":
-                return StringUtils.fromANSIString(data.array(), StandardCharsets.UTF_8);
+                if (cachedString != null) return cachedString;
+                cachedString = StringUtils.fromANSIString(data.array(), StandardCharsets.UTF_8);
+                return cachedString;
             case "STRING":
-                return StringUtils.fromANSIString(data.array(), XServer.LATIN1_CHARSET);
+                if (cachedString != null) return cachedString;
+                cachedString = StringUtils.fromANSIString(data.array(), XServer.LATIN1_CHARSET);
+                return cachedString;
             case "ATOM":
                 return Atom.getName(data.getInt(0));
             default:

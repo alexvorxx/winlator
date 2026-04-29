@@ -2,27 +2,27 @@ package com.winlator.xserver.requests;
 
 import static com.winlator.xserver.XClientRequestHandler.RESPONSE_CODE_SUCCESS;
 
-import com.winlator.core.CursorLocker;
+import com.winlator.renderer.FullscreenTransformation;
 import com.winlator.xconnector.XInputStream;
 import com.winlator.xconnector.XOutputStream;
 import com.winlator.xconnector.XStreamLock;
+import com.winlator.core.Bitmask;
 import com.winlator.xserver.Drawable;
-import com.winlator.xserver.Bitmask;
-import com.winlator.xserver.WindowAttributes;
-import com.winlator.xserver.errors.BadDrawable;
-import com.winlator.xserver.errors.BadIdChoice;
-import com.winlator.xserver.errors.BadValue;
-import com.winlator.xserver.events.CreateNotify;
-import com.winlator.xserver.events.Event;
 import com.winlator.xserver.Property;
 import com.winlator.xserver.Visual;
 import com.winlator.xserver.Window;
+import com.winlator.xserver.WindowAttributes;
 import com.winlator.xserver.WindowManager;
 import com.winlator.xserver.XClient;
 import com.winlator.xserver.errors.BadAccess;
+import com.winlator.xserver.errors.BadDrawable;
+import com.winlator.xserver.errors.BadIdChoice;
 import com.winlator.xserver.errors.BadMatch;
+import com.winlator.xserver.errors.BadValue;
 import com.winlator.xserver.errors.BadWindow;
 import com.winlator.xserver.errors.XRequestError;
+import com.winlator.xserver.events.CreateNotify;
+import com.winlator.xserver.events.Event;
 import com.winlator.xserver.events.RawEvent;
 
 import java.io.IOException;
@@ -111,8 +111,12 @@ public abstract class WindowRequests {
         client.xServer.windowManager.destroyWindow(inputStream.readInt());
     }
 
-    public static void destroySubWindows(XClient client, XInputStream inputStream, XOutputStream outputStream) {
-        client.xServer.windowManager.destroyWindow(inputStream.readInt());
+    public static void destroySubWindows(XClient client, XInputStream inputStream, XOutputStream outputStream) throws XRequestError {
+        int windowId = inputStream.readInt();
+        Window window = client.xServer.windowManager.getWindow(windowId);
+        if (window == null) throw new BadWindow(windowId);
+
+        for (Window child : window.getChildren()) client.xServer.windowManager.destroyWindow(child.id);
     }
 
     public static void reparentWindow(XClient client, XInputStream inputStream, XOutputStream outputStream) throws XRequestError {
@@ -140,17 +144,7 @@ public abstract class WindowRequests {
         int windowId = inputStream.readInt();
         Window window = client.xServer.windowManager.getWindow(windowId);
         if (window == null) throw new BadWindow(windowId);
-        for (Window child : window.getChildren())
-            mapSubWindows(client, child.id);
-        client.xServer.windowManager.mapWindow(window);
-    }
-
-    private static void mapSubWindows(XClient client, int windowId) throws XRequestError {
-        Window window = client.xServer.windowManager.getWindow(windowId);
-        if (window == null) throw new BadWindow(windowId);
-        for (Window child : window.getChildren())
-            mapSubWindows(client, child.id);
-        client.xServer.windowManager.mapWindow(window);
+        client.xServer.windowManager.mapSubWindows(window);
     }
 
     public static void unmapWindow(XClient client, XInputStream inputStream, XOutputStream outputStream) throws XRequestError {
@@ -259,8 +253,18 @@ public abstract class WindowRequests {
         if (window == null) throw new BadWindow(windowId);
         short rootX = client.xServer.pointer.getClampedX();
         short rootY = client.xServer.pointer.getClampedY();
-        Window child = window.getChildByCoords(rootX, rootY);
+        Window child = window.getChildByCoords(rootX, rootY, true);
         short[] localPoint = window.rootPointToLocal(rootX, rootY);
+
+        if (child != null) {
+            FullscreenTransformation fullscreenTransformation = child.getFullscreenTransformation();
+            if (fullscreenTransformation != null) {
+                short[] transformedPoint = fullscreenTransformation.transformPointerCoords(rootX, rootY);
+                rootX = transformedPoint[0];
+                rootY = transformedPoint[1];
+                localPoint = child.rootPointToLocal(rootX, rootY);
+            }
+        }
 
         try (XStreamLock lock = outputStream.lock()) {
             outputStream.writeByte(RESPONSE_CODE_SUCCESS);

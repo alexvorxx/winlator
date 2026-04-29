@@ -103,6 +103,22 @@ public class WinHandler {
         });
     }
 
+    public void killProcess(final String processName, final int pid) {
+        addAction(() -> {
+            sendData.rewind();
+            sendData.put(RequestCodes.KILL_PROCESS);
+            if (processName != null) {
+                byte[] bytes = processName.getBytes();
+                int minLength = Math.min(bytes.length, 55);
+                sendData.putInt(minLength);
+                sendData.put(bytes, 0, minLength);
+            }
+            else sendData.putInt(0);
+            sendData.putInt(pid);
+            sendPacket(CLIENT_PORT);
+        });
+    }
+
     public void listProcesses() {
         addAction(() -> {
             sendData.rewind();

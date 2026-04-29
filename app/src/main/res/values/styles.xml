@@ -186,6 +186,29 @@
         <item name="android:layout_marginLeft">8dp</item>
         <item name="android:textColor">#bdbdbd</item>
     </style>
+    <style name="TableHead">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">28dp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">#ffffff</item>
+        <item name="android:paddingLeft">4dp</item>
+        <item name="android:gravity">center_vertical</item>
+    </style>
+    <style name="TableHeadRightLine">
+        <item name="android:layout_width">1dp</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:background">#0278b8</item>
+    </style>
+    <style name="TableHeadBottomLine">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">1dp</item>
+        <item name="android:background">#0278b8</item>
+    </style>
+    <style name="TableBodyRightLine">
+        <item name="android:layout_width">1dp</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:background">?attr/colorControlNormal</item>
+    </style>
     <style name="TableHeadBackground">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">28dp</item>

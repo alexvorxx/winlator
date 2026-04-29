@@ -552,4 +552,9 @@ E.g. <b>META</b> for <i>META key</i>, \n
     <string name="install_drivers_message" translatable="false">You will now be prompted to pick a driver. These must be the same ones used in other emulators like Yuzu, Dolphin, Citra, etc.</string>
     <string name="install_drivers_warning" translatable="false">Be warned that because of limitations of current PC emulators, Qualcomm Drivers may not work on chipsets below 8 Gen2 without getting patched.</string>
     <string name="adrenotools_gpu_drivers" translatable="false">Adrenotools GPU Drivers</string>
+
+    <string name="voltage" translatable="false">Voltage</string>
+    <string name="current" translatable="false">Current</string>
+    <string name="capacity" translatable="false">Capacity</string>
+    <string name="battery" translatable="false">Battery</string>
 </resources>

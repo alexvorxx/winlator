@@ -1,4 +1,4 @@
-package com.winlator.xserver;
+package com.winlator.core;
 
 import androidx.annotation.NonNull;
 
@@ -13,14 +13,8 @@ public class Bitmask implements Iterable<Integer> {
         this.bits = bits;
     }
 
-    public Bitmask(int[] bitsArray) {
-        byte b = 0;
-        this.bits = 0;
-        int i = bitsArray.length;
-        while (b < i) {
-            set(bitsArray[b]);
-            b++;
-        }
+    public Bitmask(int[] flags) {
+        for (int flag : flags) set(flag);
     }
 
     public boolean isSet(int flag) {
@@ -80,5 +74,11 @@ public class Bitmask implements Iterable<Integer> {
     @Override
     public int hashCode() {
         return bits;
+    }
+
+    @NonNull
+    @Override
+    public String toString() {
+        return String.valueOf(bits);
     }
 }

@@ -1,5 +1,6 @@
 package com.winlator.xserver;
 
+import com.winlator.core.Bitmask;
 import com.winlator.math.Mathf;
 
 import java.util.ArrayList;
