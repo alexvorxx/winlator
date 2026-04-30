@@ -1027,6 +1027,7 @@ public class X11Activity extends AppCompatActivity implements View.OnApplyWindow
 
         if (container != null && container.isShowFPS()) {
             frameRating = new FrameRating(this);
+            frameRating.setShowOtherCounters(container.isShowOtherCounters());
             frameRating.setVisibility(View.GONE);
             rootView.addView(frameRating);
         }

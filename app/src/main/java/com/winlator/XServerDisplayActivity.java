@@ -785,6 +785,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
         if (container != null && container.isShowFPS()) {
             frameRating = new FrameRating(this);
+            frameRating.setShowOtherCounters(container.isShowOtherCounters());
             frameRating.setVisibility(View.GONE);
             rootView.addView(frameRating);
         }

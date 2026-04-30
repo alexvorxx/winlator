@@ -50,6 +50,7 @@ public class Container {
     private String drives = DEFAULT_DRIVES;
     private String wineVersion = WineInfo.MAIN_WINE_VERSION.identifier();
     private boolean showFPS;
+    private boolean showOtherCounters;
     private boolean wow64Mode = true;
     private byte startupSelection = STARTUP_SELECTION_ESSENTIAL;
     private String cpuList;
@@ -185,6 +186,14 @@ public class Container {
 
     public void setShowFPS(boolean showFPS) {
         this.showFPS = showFPS;
+    }
+
+    public boolean isShowOtherCounters() {
+        return showOtherCounters;
+    }
+
+    public void setShowOtherCounters(boolean showOtherCounters) {
+        this.showOtherCounters = showOtherCounters;
     }
 
     public boolean isWoW64Mode() {
@@ -390,6 +399,7 @@ public class Container {
             data.put("wincomponents", wincomponents);
             data.put("drives", drives);
             data.put("showFPS", showFPS);
+            data.put("showOtherCounters", showOtherCounters);
             data.put("inputType", inputType);
             data.put("wow64Mode", wow64Mode);
             data.put("startupSelection", startupSelection);
@@ -455,6 +465,9 @@ public class Container {
                     break;
                 case "showFPS" :
                     setShowFPS(data.getBoolean(key));
+                    break;
+                case "showOtherCounters" :
+                    setShowOtherCounters(data.getBoolean(key));
                     break;
                 case "inputType" :
                     setInputType(data.getInt(key));

@@ -74,6 +74,7 @@
     <string name="strict_shader_math">Strict Shader Math</string>
     <string name="video_memory_size">Объем видеопамяти</string>
     <string name="show_fps">Показывать FPS</string>
+    <string name="show_other_counters">Другие счетчики</string>
     <string name="none">Ничего</string>
     <string name="custom_text">Произвольный текст</string>
     <string name="icon">Иконка</string>

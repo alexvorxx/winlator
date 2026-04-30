@@ -75,6 +75,7 @@
     <string name="video_memory_size">Video Memory Size</string>
     <string name="renderer" translatable="false">Renderer</string>
     <string name="show_fps">Show FPS</string>
+    <string name="show_other_counters" translatable="false">Other counters</string>
     <string name="none">None</string>
     <string name="custom_text">Custom Text</string>
     <string name="icon">Icon</string>
@@ -557,4 +558,8 @@ E.g. <b>META</b> for <i>META key</i>, \n
     <string name="current" translatable="false">Current</string>
     <string name="capacity" translatable="false">Capacity</string>
     <string name="battery" translatable="false">Battery</string>
+
+    <string name="fps_text" translatable="false">FPS:</string>
+    <string name="ram_text" translatable="false">RAM:</string>
+    <string name="battery_temperature_text" translatable="false">BAT:</string>
 </resources>
