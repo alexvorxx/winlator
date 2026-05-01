@@ -1,8 +1,7 @@
 package com.winlator.xserver;
 
-import android.util.Log;
-import android.util.SparseArray;
-
+import com.winlator.XServerDisplayActivity;
+import com.winlator.contentdialog.DebugDialog;
 import com.winlator.core.CursorLocker;
 import com.winlator.renderer.GLRenderer;
 import com.winlator.winhandler.WinHandler;
@@ -24,7 +23,8 @@ public class XServer {
     public static final short VERSION = 11;
     public static final String VENDOR_NAME = "Elbrus Technologies, LLC";
     public static final Charset LATIN1_CHARSET = Charset.forName("latin1");
-    public final SparseArray<Extension> extensions = new SparseArray<>();
+    public final XServerDisplayActivity activity;
+    private final Extension[] extensions;
     public final ScreenInfo screenInfo;
     public final PixmapManager pixmapManager;
     public final ResourceIDs resourceIDs = new ResourceIDs(128);
@@ -44,7 +44,8 @@ public class XServer {
     private final EnumMap<Lockable, ReentrantLock> locks = new EnumMap<>(Lockable.class);
     private boolean relativeMouseMovement = false;
 
-    public XServer(ScreenInfo screenInfo) {
+    public XServer(XServerDisplayActivity activity, ScreenInfo screenInfo) {
+        this.activity = activity;
         this.screenInfo = screenInfo;
         cursorLocker = new CursorLocker(this);
         for (Lockable lockable : Lockable.values()) locks.put(lockable, new ReentrantLock());
@@ -58,7 +59,7 @@ public class XServer {
         grabManager = new GrabManager(this);
 
         DesktopHelper.attachTo(this);
-        setupExtensions();
+        extensions = setupExtensions();
     }
 
     public boolean isRelativeMouseMovement() {
@@ -137,10 +138,7 @@ public class XServer {
     }
 
     public Extension getExtensionByName(String name) {
-        for (int i = 0; i < extensions.size(); i++) {
-            Extension extension = extensions.valueAt(i);
-            if (extension.getName().equals(name)) return extension;
-        }
+        for (Extension extension : extensions) if (extension.getName().equals(name)) return extension;
         return null;
     }
 
@@ -184,17 +182,22 @@ public class XServer {
         }
     }
 
-    private void setupExtensions() {
-        extensions.put(BigReqExtension.MAJOR_OPCODE, new BigReqExtension());
-        extensions.put(MITSHMExtension.MAJOR_OPCODE, new MITSHMExtension());
-        extensions.put(DRI3Extension.MAJOR_OPCODE, new DRI3Extension());
-        extensions.put(PresentExtension.MAJOR_OPCODE, new PresentExtension());
-        extensions.put(SyncExtension.MAJOR_OPCODE, new SyncExtension());
-        extensions.put(XComposite.MAJOR_OPCODE, new XComposite());
-        extensions.put(GLXExtension.MAJOR_OPCODE, new GLXExtension(this));
+    private Extension[] setupExtensions() {
+        byte opcode = Extension.START_MAJOR_OPCODE;
+        return new Extension[]{
+            new BigReqExtension(this, opcode--),
+            new MITSHMExtension(this, opcode--),
+            new DRI3Extension(this, opcode--),
+            new PresentExtension(this, opcode--),
+            new SyncExtension(this, opcode--),
+            new XComposite(this, opcode--),
+            new GLXExtension(this, opcode--)
+        };
     }
 
-    public <T extends Extension> T getExtension(int opcode) {
-        return (T)extensions.get(opcode);
+    public <T extends Extension> T getExtension(byte opcode) {
+        int index = Extension.START_MAJOR_OPCODE - opcode;
+        return (T)extensions[index];
     }
+
 }

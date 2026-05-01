@@ -361,7 +361,7 @@ public class X11Activity extends AppCompatActivity implements View.OnApplyWindow
 
         inputControlsManager = new InputControlsManager(this);
 
-        xServer = new XServer(new ScreenInfo(screenSize));
+        xServer = new XServer(null, new ScreenInfo(screenSize));
 
         if (!midiSoundFont.equals("")) {
             InputStream in = null;

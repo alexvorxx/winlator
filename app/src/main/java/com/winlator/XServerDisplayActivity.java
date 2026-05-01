@@ -315,7 +315,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
         screeninfo = new ScreenInfo(screenSize);
 
-        xServer = new XServer(screeninfo);
+        xServer = new XServer(this, screeninfo);
         xServer.setWinHandler(winHandler);
         boolean[] winStarted = {false};
         xServer.windowManager.addOnWindowModificationListener(new WindowManager.OnWindowModificationListener() {
