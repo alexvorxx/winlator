@@ -30,6 +30,16 @@ public abstract class WineUtils {
         FileUtils.symlink("../drive_c", dosdevicesPath+"/c:");
         FileUtils.symlink(container.getRootDir().getPath() + "/../..", dosdevicesPath+"/z:");
 
+        File driveX = new File(container.getRootDir(), ".wine/drive_x");
+        if (!driveX.isDirectory()) {
+            driveX.mkdir();
+            FileUtils.chmod(driveX, 0771);
+        }
+
+        String serial = String.format(Locale.ENGLISH, "%-8x", (int)'X').replace(' ', '0');
+        FileUtils.writeString(new File(driveX, ".windows-serial"), serial+"\n");
+        FileUtils.symlink("../drive_x", dosdevicesPath+"/x:");
+
         for (String[] drive : container.drivesIterator()) {
             File linkTarget = new File(drive[1]);
             String path = linkTarget.getAbsolutePath();
