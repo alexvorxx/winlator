@@ -1524,7 +1524,11 @@ public class X11Activity extends AppCompatActivity implements View.OnApplyWindow
         RCFile rcfile = manager.getRcfile(rcfileId);
         File file = new File(container.getRootDir(), ".box64rc");
         String str = rcfile == null ? "" : rcfile.generateBox86_64rc();
-        FileUtils.writeString(file, str);
+        if (rcfileId > 0)
+            FileUtils.writeString(file, str);
+        else
+            FileUtils.copy(this, "box86_64/rcfiles/default.box64rc", file);
+
         envVars.put("BOX64_RCFILE", file.getAbsolutePath());
 
         guestProgramLauncherComponent.setEnvVars(envVars);

@@ -110,4 +110,12 @@ public class ImageFs {
     public String toString() {
         return rootDir.getPath();
     }
+
+    public static String getDosUserCachePath() {
+        return "Z:"+CACHE_PATH.replace("/", "\\");
+    }
+
+    public static String getDosUserConfigPath() {
+        return "Z:"+CONFIG_PATH.replace("/", "\\");
+    }
 }

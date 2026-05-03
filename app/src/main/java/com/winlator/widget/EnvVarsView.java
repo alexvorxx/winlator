@@ -39,7 +39,8 @@ public class EnvVarsView extends FrameLayout {
         {"PULSE_LATENCY_MSEC", "NUMBER"},
         {"BOX64_MMAP32", "CHECKBOX", "0", "1"},
         {"BOX64_DYNAREC_WEAKBARRIER", "SELECT", "0", "1", "2"},
-        {"WINE_DISABLE_FULLSCREEN_HACK", "CHECKBOX", "0", "1"}
+        {"WINE_DISABLE_FULLSCREEN_HACK", "CHECKBOX", "0", "1"},
+        {"DXVK_CONFIG_FILE", "SELECT", "dxvk.conf"},
     };
     private final LinearLayout container;
     private final TextView emptyTextView;

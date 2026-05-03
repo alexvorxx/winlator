@@ -13,6 +13,7 @@ import com.winlator.contents.ContentsManager;
 import com.winlator.core.AppUtils;
 import com.winlator.core.DefaultVersion;
 import com.winlator.core.EnvVars;
+import com.winlator.core.FileUtils;
 import com.winlator.core.KeyValueSet;
 import com.winlator.core.StringUtils;
 import com.winlator.xenvironment.ImageFs;
@@ -138,11 +139,10 @@ public class DXVK_VKD3DConfigDialog extends ContentDialog {
     }
 
     public static void setEnvVars(Context context, KeyValueSet config, EnvVars envVars) {
-        envVars.put("DXVK_STATE_CACHE_PATH", "/data/data/com.winlator/files/imagefs"+ImageFs.CACHE_PATH);
-        envVars.put("DXVK_LOG_LEVEL", "none");
-
         File rootDir = ImageFs.find(context).getRootDir();
-        File dxvkConfigFile = new File(rootDir, ImageFs.CONFIG_PATH+"/dxvk.conf");
+
+        envVars.put("DXVK_STATE_CACHE_PATH", rootDir.getPath() + ImageFs.CACHE_PATH);
+        envVars.put("DXVK_LOG_LEVEL", "none");
 
         String content = "\"";
         String maxDeviceMemory = config.get("maxDeviceMemory");
@@ -153,30 +153,64 @@ public class DXVK_VKD3DConfigDialog extends ContentDialog {
 
         String framerate = config.get("framerate");
         if (!framerate.isEmpty() && !framerate.equals("0")) {
-//            content += "dxgi.maxFrameRate = "+framerate+';';
-//            content += "d3d9.maxFrameRate = "+framerate+';';
             envVars.put("DXVK_FRAME_RATE", framerate);
         }
 
         String async = config.get("async");
         if (!async.isEmpty() && !async.equals("0"))
-//            content += "dxvk.enableAsync = True;";
             envVars.put("DXVK_ASYNC", "1");
 
         String asyncCache = config.get("asyncCache");
         if (!asyncCache.isEmpty() && !asyncCache.equals("0"))
-//            content += "dxvk.gplAsyncCache = True;";
             envVars.put("DXVK_GPLASYNCCACHE", "1");
         content = content + '\"';
 
-//        FileUtils.delete(dxvkConfigFile);
-//        if (!content.isEmpty() && FileUtils.writeString(dxvkConfigFile, content)) {
-//            envVars.put("DXVK_CONFIG_FILE", rootDir + ImageFs.CONFIG_PATH+"/dxvk.conf");
-//        }
-        envVars.put("DXVK_CONFIG_FILE", rootDir + ImageFs.CONFIG_PATH+"/dxvk.conf");
         envVars.put("DXVK_CONFIG", content);
 
         envVars.put("VKD3D_FEATURE_LEVEL", config.get("vkd3dLevel"));
+
+        File dxvkConfigFile = new File(rootDir, ImageFs.CONFIG_PATH+"/dxvk.conf");
+
+        FileUtils.delete(dxvkConfigFile);
+        if (FileUtils.writeString(dxvkConfigFile, getDXVKConfigContent(config))) {
+            envVars.put("DXVK_CONFIG_FILE", ImageFs.getDosUserConfigPath()+"\\dxvk.conf");
+        }
+    }
+
+    private static String getDXVKConfigContent(KeyValueSet config) {
+        String content = "";
+
+        String maxDeviceMemory = config.get("maxDeviceMemory");
+        if (!maxDeviceMemory.isEmpty() && !maxDeviceMemory.equals("0")) {
+            content += "dxgi.maxDeviceMemory = "+maxDeviceMemory+"\n";
+            content += "dxgi.maxSharedMemory = "+maxDeviceMemory+"\n";
+        }
+
+        String framerate = config.get("framerate");
+        if (!framerate.isEmpty() && !framerate.equals("0")) {
+            content += "dxgi.maxFrameRate = "+framerate+"\n";
+            content += "d3d9.maxFrameRate = "+framerate+"\n";
+        }
+
+        String customDevice = config.get("customDevice");
+        if (customDevice.contains(":")) {
+            String[] parts = customDevice.split(":");
+            content += "dxgi.customDeviceId = "+parts[0]+"\n";
+            content += "dxgi.customVendorId = "+parts[1]+"\n";
+
+            content += "d3d9.customDeviceId = "+parts[0]+"\n";
+            content += "d3d9.customVendorId = "+parts[1]+"\n";
+
+            content += "dxgi.customDeviceDesc = \""+parts[2]+"\"\n";
+            content += "d3d9.customDeviceDesc = \""+parts[2]+"\"\n";
+        }
+
+        content += "d3d11.constantBufferRangeCheck = \"True\"\n\n";
+
+        content += "[GTA5.exe]\n";
+        content += "dxgi.maxDeviceMemory = 1024\n";
+        content += "dxgi.maxSharedMemory = 1024\n";
+        return content;
     }
 
     private void loadDxvkVersionSpinner(ContentsManager manager, Spinner spinner) {
