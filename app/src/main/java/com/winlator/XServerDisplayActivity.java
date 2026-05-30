@@ -1397,6 +1397,10 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         String appIdentifier = className.toLowerCase(Locale.ENGLISH);
 
         switch (appIdentifier) {
+            case "prototypef.exe":
+                winHandler.setProcessAffinity(processId, 0b10000000);
+                winHandler.bringToFront(className);
+                break;
             case "prototype2.exe":
                 winHandler.setProcessAffinity(processId, 0b10000000);
                 restoreProcessAffinityDelayed(processId, processAffinity);
