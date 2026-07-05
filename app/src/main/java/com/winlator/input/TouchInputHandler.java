@@ -531,6 +531,13 @@ public class TouchInputHandler {
         mInjector.sendMouseWheelEvent(distance, distance);
     }
 
+    public void sendCursorMoveDelta(MotionEvent event, float deltaX, float deltaY) {
+        mScroller.onTouchEvent(event);
+        mTapDetector.onTouchEvent(event);
+        mSwipePinchDetector.onTouchEvent(event);
+        mInjector.sendCursorMove(deltaX, deltaY, true);
+    }
+
     private class HardwareMouseListener {
         private int savedBS = 0;
         private int currentBS = 0;

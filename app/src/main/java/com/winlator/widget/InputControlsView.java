@@ -43,6 +43,7 @@ import java.io.InputStream;
 import java.util.Timer;
 import java.util.TimerTask;
 
+import static com.winlator.X11Activity.handleCursorMoveDeltaX11;
 import static com.winlator.X11Activity.handleInputEventX11;
 import static com.winlator.X11Activity.handleInputMouseEventX11;
 import static com.winlator.X11Activity.handleTouchEventX11;
@@ -70,6 +71,8 @@ public class InputControlsView extends View {
     private Vibrator vibrator;
     private VibrationEffect effect;
     private boolean showTouchscreenControls = true;
+    private float x0, y0;
+    private boolean coordsInitialized = false;
 
     @SuppressLint("ResourceType")
     public InputControlsView(Context context) {
@@ -406,6 +409,9 @@ public class InputControlsView extends View {
                         }
                     }
                     if (!handled) {
+                        x0 = x;
+                        y0 = y;
+                        coordsInitialized = true;
                         if (handleTouchEventX11(this, event)) break;
                         touchpadView.onTouchEvent(event);
                     }
@@ -421,7 +427,17 @@ public class InputControlsView extends View {
                             if (element.handleTouchMove(i, x, y)) handled = true;
                         }
                         if (!handled) {
-                            if (handleTouchEventX11(this, event)) break;
+                            if (!coordsInitialized) {
+                                x0 = x;
+                                y0 = y;
+                                coordsInitialized = true;
+                            } else {
+                                if (handleCursorMoveDeltaX11(event, x - x0, y - y0)) {
+                                    x0 = x;
+                                    y0 = y;
+                                    break;
+                                }
+                            }
                             touchpadView.onTouchEvent(event);
                         }
                     }
@@ -432,6 +448,7 @@ public class InputControlsView extends View {
                 case MotionEvent.ACTION_CANCEL:
                     for (ControlElement element : profile.getElements()) if (element.handleTouchUp(pointerId)) handled = true;
                     if (!handled) {
+                        coordsInitialized = false;
                         if (handleTouchEventX11(this, event)) break;
                         touchpadView.onTouchEvent(event);
                     }

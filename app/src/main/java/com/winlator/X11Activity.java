@@ -1714,4 +1714,13 @@ public class X11Activity extends AppCompatActivity implements View.OnApplyWindow
             return false;
     }
 
+    public static boolean handleCursorMoveDeltaX11(MotionEvent event, float deltaX, float deltaY) {
+        if (mInputHandlerRunning) {
+            mInputHandler.sendCursorMoveDelta(event, deltaX, deltaY);
+            return true;
+        }
+        else
+            return false;
+    }
+
 }
