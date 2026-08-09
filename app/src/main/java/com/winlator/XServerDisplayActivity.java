@@ -1414,6 +1414,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 winHandler.bringToFront(className);
                 break;
             case "farcry3.exe":
+            case "misidefull.exe":
                 winHandler.bringToFront(className);
                 break;
             case "blacklist_game.exe":
