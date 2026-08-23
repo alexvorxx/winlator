@@ -528,4 +528,8 @@
     <string name="current">Ток</string>
     <string name="capacity">Емкость</string>
     <string name="battery">Батарея</string>
+
+    <string name="vkbasalt_sharpness_effects">Эффект резкости</string>
+    <string name="vkbasalt_sharpness_level">Уровень резкости</string>
+    <string name="vkbasalt_sharpness_denoise">Шумоподавление резкости</string>
 </resources>

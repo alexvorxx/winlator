@@ -613,6 +613,92 @@
 
             </FrameLayout>
 
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" >
+
+                <LinearLayout style="@style/FieldSet" >
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/vkbasalt_sharpness_effects" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical" >
+
+                        <Spinner
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:id="@+id/SSharpnessEffect"
+                            style="@style/ComboBox"
+                            android:entries="@array/vkbasalt_sharpness_entries"
+                            android:spinnerMode="dialog" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal" >
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="@string/vkbasalt_sharpness_level" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:id="@+id/TVSharpnessLevel" />
+                        </LinearLayout>
+
+                        <SeekBar
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:min="0"
+                            android:id="@+id/SBSharpnessLevel"
+                            android:max="100" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal" >
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="@string/vkbasalt_sharpness_denoise" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_gravity="end"
+                                android:gravity="end"
+                                android:layout_height="wrap_content"
+                                android:id="@+id/TVSharpnessDenoise" />
+
+                        </LinearLayout>
+
+                        <SeekBar
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:min="0"
+                            android:id="@+id/SBSharpnessDenoise"
+                            android:max="100" />
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+                <TextView
+                    style="@style/FieldSetLabel"
+                    android:background="#ffffff"
+                    android:text="@string/vkbasalt" />
+            </FrameLayout>
+
         </LinearLayout>
     </LinearLayout>
 </ScrollView>

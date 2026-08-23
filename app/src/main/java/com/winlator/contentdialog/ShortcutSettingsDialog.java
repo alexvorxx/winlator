@@ -9,7 +9,9 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.PopupMenu;
+import android.widget.SeekBar;
 import android.widget.Spinner;
+import android.widget.TextView;
 
 import com.winlator.ContainerDetailFragment;
 import com.winlator.R;
@@ -103,6 +105,51 @@ public class ShortcutSettingsDialog extends ContentDialog {
 
         cbUseSecondaryExec.setOnCheckedChangeListener((buttonView, isChecked) -> {
              llSecondaryExecOptions.setVisibility(isChecked ? View.VISIBLE : View.GONE);
+        });
+
+        final Spinner sSharpnessEffect = findViewById(R.id.SSharpnessEffect);
+        final SeekBar sbSharpnessLevel = findViewById(R.id.SBSharpnessLevel);
+        final SeekBar sbSharpnessDenoise = findViewById(R.id.SBSharpnessDenoise);
+        final TextView tvSharpnessLevel = findViewById(R.id.TVSharpnessLevel);
+        final TextView tvSharpnessDenoise = findViewById(R.id.TVSharpnessDenoise);
+
+        AppUtils.setSpinnerSelectionFromValue(sSharpnessEffect, shortcut.getExtra("sharpnessEffect", "None"));
+
+        sbSharpnessLevel.setProgress(Integer.parseInt(shortcut.getExtra("sharpnessLevel", "100")));
+        tvSharpnessLevel.setText(shortcut.getExtra("sharpnessLevel", "100") + "%");
+        sbSharpnessLevel.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                tvSharpnessLevel.setText(progress + "%");
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+
+            }
+        });
+        sbSharpnessDenoise.setProgress(Integer.parseInt(shortcut.getExtra("sharpnessDenoise", "100")));
+        tvSharpnessDenoise.setText(shortcut.getExtra("sharpnessDenoise", "100") + "%");
+        sbSharpnessDenoise.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                tvSharpnessDenoise.setText(progress + "%");
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+
+            }
         });
 
         final Runnable showInputWarning = () -> ContentDialog.alert(context, R.string.enable_xinput_and_dinput_same_time, null);
@@ -261,6 +308,14 @@ public class ShortcutSettingsDialog extends ContentDialog {
                 shortcut.putExtra("controlsProfile", controlsProfile > 0 ? String.valueOf(controlsProfile) : null);
                 shortcut.putExtra("simTouchScreen", cbSimulateTouchScreen.isChecked() ? "1" : "0");
                 shortcut.putExtra("inputType", String.valueOf(finalInputType));
+
+                String sharpeningEffect = sSharpnessEffect.getSelectedItem().toString();
+                String sharpeningLevel = String.valueOf(sbSharpnessLevel.getProgress());
+                String sharpeningDenoise = String.valueOf(sbSharpnessDenoise.getProgress());
+                shortcut.putExtra("sharpnessEffect", sharpeningEffect);
+                shortcut.putExtra("sharpnessLevel", sharpeningLevel);
+                shortcut.putExtra("sharpnessDenoise", sharpeningDenoise);
+
                 shortcut.saveData();
             }
         });

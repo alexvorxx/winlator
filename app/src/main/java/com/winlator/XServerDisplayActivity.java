@@ -158,6 +158,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
     private final float[] xform = XForm.getInstance();
     private ScreenInfo screeninfo;
     private String screenEffectProfile;
+    private String vkbasaltConfig = "";
 
     private boolean useOldVirGL;
 
@@ -295,6 +296,13 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
                 String inputType = shortcut.getExtra("inputType");
                 if (!inputType.isEmpty()) winHandler.setInputType(Byte.parseByte(inputType));
+
+                String sharpnessEffect = shortcut.getExtra("sharpnessEffect", "None");
+                if (!sharpnessEffect.equals("None")) {
+                    double sharpnessLevel = Double.parseDouble(shortcut.getExtra("sharpnessLevel", "100"));
+                    double sharpnessDenoise = Double.parseDouble(shortcut.getExtra("sharpnessDenoise", "100"));
+                    vkbasaltConfig = "effects=" + sharpnessEffect.toLowerCase() + ";" + "casSharpness=" + sharpnessLevel / 100 + ";" + "dlsSharpness=" + sharpnessLevel / 100  + ";" + "dlsDenoise=" + sharpnessDenoise / 100 + ";" + "enableOnLaunch=True";
+                }
             }
 
             useOldVirGL = graphicsDriverConfig.getBoolean("useOldVirGL", false);
@@ -965,6 +973,11 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 envVars.put("MESA_VK_WSI_DEBUG", "sw");
             }
 
+            if (!vkbasaltConfig.isEmpty()) {
+                envVars.put("ENABLE_VKBASALT", "1");
+                envVars.put("VKBASALT_CONFIG", vkbasaltConfig);
+            }
+
             if (changed) {
                 ContentProfile profile = contentsManager.getProfileByEntryName(graphicsDriver);
                 if (profile != null) {
@@ -1004,6 +1017,11 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 DXVK_VKD3DConfigDialog.setEnvVars(this, dxwrapperConfig, envVars);
             }
 
+            if (!vkbasaltConfig.isEmpty()) {
+                envVars.put("ENABLE_VKBASALT", "1");
+                envVars.put("VKBASALT_CONFIG", vkbasaltConfig);
+            }
+
             if (changed) {
                 TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/vortek-" + DefaultVersion.VORTEK + ".tzst", rootDir);
                 TarCompressorUtils.extract(TarCompressorUtils.Type.ZSTD, this, "graphics_driver/zink-" + DefaultVersion.ZINK + ".tzst", rootDir);
@@ -1026,6 +1044,11 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             if (!useDRI3) {
                 envVars.put("MESA_VK_WSI_PRESENT_MODE", "immediate");
                 envVars.put("MESA_VK_WSI_DEBUG", "sw");
+            }
+
+            if (!vkbasaltConfig.isEmpty()) {
+                envVars.put("ENABLE_VKBASALT", "1");
+                envVars.put("VKBASALT_CONFIG", vkbasaltConfig);
             }
 
             if (changed) {

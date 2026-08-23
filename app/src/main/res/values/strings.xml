@@ -563,4 +563,9 @@ E.g. <b>META</b> for <i>META key</i>, \n
     <string name="fps_text" translatable="false">FPS:</string>
     <string name="ram_text" translatable="false">RAM:</string>
     <string name="battery_temperature_text" translatable="false">BAT:</string>
+
+    <string name="vkbasalt" translatable="false">vkBasalt</string>
+    <string name="vkbasalt_sharpness_effects" translatable="false">Sharpness Effect</string>
+    <string name="vkbasalt_sharpness_level" translatable="false">Sharpness Level</string>
+    <string name="vkbasalt_sharpness_denoise" translatable="false">Sharpeness Denoise</string>
 </resources>

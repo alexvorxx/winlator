@@ -304,4 +304,9 @@
         <item>reverse portrait</item>
         <item>reverse landscape</item>
     </string-array>
+    <string-array name="vkbasalt_sharpness_entries">
+        <item>None</item>
+        <item>CAS</item>
+        <item>DLS</item>
+    </string-array>
 </resources>
