@@ -13,7 +13,20 @@ public class FrameGenerationEffect extends Effect {
     public static final int MODE_BALANCED = 1;
     public static final int MODE_QUALITY = 2;
 
-    private int currentMode = MODE_BALANCED;
+    public static final float DEFAULT_BLEND_FACTOR = 0.75f;
+    public static final float BLEND_FACTOR_X2 = 0.50f;
+    public static final float BLEND_FACTOR_X3_FAST = 0.33f;
+    public static final float BLEND_FACTOR_X4_FAST = 0.25f;
+    public static final float BLEND_FACTOR_X3_BALANCED = 0.45f;
+    public static final float BLEND_FACTOR_X4_BALANCED = 0.30f;
+
+    public static final int FPS_MULTIPLIER_X2 = 2;
+    public static final int FPS_MULTIPLIER_X3 = 3;
+    public static final int FPS_MULTIPLIER_X4 = 4;
+
+    private int fpsMultiplier;
+
+    private int generationMode;
 
     private static final long NANOS_PER_SECOND = 1_000_000_000L;
     private static final long NANOS_PER_MILLISECOND = 1_000_000L;
@@ -30,7 +43,11 @@ public class FrameGenerationEffect extends Effect {
     private static final long MAX_FRAME_INTERVAL_NS = 1000 * NANOS_PER_MILLISECOND;  // 1000ms
 
     private boolean isEnabled = false;
-    private float blendFactor = 0.5f;
+
+    private float blendFactor;
+
+    private float customBlendFactor;
+    private float blendFactorX3, blendFactorX4;
 
     // Buffers for frames
     private int texturePrev = -1;
@@ -50,7 +67,7 @@ public class FrameGenerationEffect extends Effect {
     public static final int FPS_45 = 45;
     public static final int FPS_60 = 60;
 
-    private int targetFPS = FPS_30;
+    private int initialFPS = FPS_30;
     private boolean autoDetectFPS = false;
 
     private List<Long> realFrameIntervals = new ArrayList<>();
@@ -92,16 +109,22 @@ public class FrameGenerationEffect extends Effect {
             Log.d(TAG, message);
     }
 
-    public FrameGenerationEffect() {
+    public FrameGenerationEffect(int generationMode, int fpsMultiplier, float customBlendFactor) {
         super();
+        this.generationMode = generationMode;
+        this.fpsMultiplier = fpsMultiplier;
+        this.customBlendFactor = customBlendFactor;
+
         updateFrameIntervals();
         calculateDisplayCounts();
-        LogString("Effect created with target FPS: " + targetFPS);
+        updateBlendFactors();
+        Log.d(TAG, "FrameGenerationEffect created with generationMode = " + generationMode +
+                " fpsMultiplier = " + fpsMultiplier + " customBlendFactor = " + customBlendFactor );
     }
 
     @Override
     protected ShaderMaterial createMaterial() {
-        switch (currentMode) {
+        switch (generationMode) {
             case MODE_FAST:
                 Log.d(TAG, "Fast generation mode selected");
                 return new FastFrameGenerationMaterial();
@@ -111,21 +134,47 @@ public class FrameGenerationEffect extends Effect {
             case MODE_BALANCED:
             default:
                 Log.d(TAG, "Balanced generation mode selected");
-                return new OptimizedFrameGenerationMaterial();
+                return new BalancedFrameGenerationMaterial();
         }
     }
 
     public void setGenerationMode(int mode) {
-        if (this.currentMode != mode) {
-            this.currentMode = mode;
+        if (this.generationMode != mode) {
+            this.generationMode = mode;
 
             cleanup();
             resetState();
+            updateBlendFactors();
         }
     }
 
-    public int getCurrentMode() {
-        return currentMode;
+    public int getGenerationMode() {
+        return generationMode;
+    }
+
+    public void setBlendFactor(float customBlendFactor) {
+        if (this.customBlendFactor != customBlendFactor) {
+            this.customBlendFactor = customBlendFactor;
+            LogString("customBlendFactor = " + customBlendFactor);
+        }
+    }
+
+    public float getBlendFactor() {
+        return customBlendFactor;
+    }
+
+    public void setFpsMultiplier (int fpsMultiplier) {
+        if (this.fpsMultiplier != fpsMultiplier) {
+            this.fpsMultiplier = fpsMultiplier;
+            cleanup();
+            calculateDisplayCounts();
+            resetState();
+            LogString("fpsMultiplier = " + fpsMultiplier);
+        }
+    }
+
+    public int getFpsMultiplier() {
+        return fpsMultiplier;
     }
 
     public void toggleGeneration() {
@@ -151,8 +200,8 @@ public class FrameGenerationEffect extends Effect {
     }
 
     private void updateFrameIntervals() {
-        currentRealFrameIntervalNs = NANOS_PER_SECOND / targetFPS;
-        currentTargetFrameIntervalNs = currentRealFrameIntervalNs / 2;
+        currentRealFrameIntervalNs = NANOS_PER_SECOND / initialFPS;
+        currentTargetFrameIntervalNs = currentRealFrameIntervalNs / fpsMultiplier;
 
         currentTargetFrameIntervalNs = Math.max(MIN_FRAME_INTERVAL_NS,
                 Math.min(currentTargetFrameIntervalNs, currentRealFrameIntervalNs));
@@ -170,25 +219,10 @@ public class FrameGenerationEffect extends Effect {
 
         realFrameDisplayCount = (int) Math.max(1, currentTargetFrameIntervalNs / frameDurationNs);
 
-        generatedFrameDisplayCount = (int) Math.max(1, currentTargetFrameIntervalNs / frameDurationNs);
+        generatedFrameDisplayCount = (int) Math.max(1, currentTargetFrameIntervalNs / frameDurationNs * (fpsMultiplier - 1));
 
         LogString(String.format("Display counts: real=%d, generated=%d (refresh rate=%d Hz)",
                 realFrameDisplayCount, generatedFrameDisplayCount, displayRefreshRate));
-    }
-
-    private long calculateAverageFrameInterval() {
-        if (realFrameIntervals.isEmpty()) {
-            //return 67 * NANOS_PER_MILLISECOND;  // 67 ms
-            return 33333333;  // 33.333333 ms
-        }
-
-        long sum = 0;
-        for (long interval : realFrameIntervals) {
-            sum += interval;
-        }
-
-        long average = sum / realFrameIntervals.size();
-        return Math.max(MIN_FRAME_INTERVAL_NS, Math.min(average, MAX_FRAME_INTERVAL_NS));
     }
 
     private void clearHistory() {
@@ -263,18 +297,18 @@ public class FrameGenerationEffect extends Effect {
         if (fps < 1)
             return;
 
-        this.targetFPS = fps;
+        this.initialFPS = fps;
         updateFrameIntervals();
     }
 
-    public void setTargetFPS(int fps) {
+    public void setInitialFPS(int fps) {
         if (fps == FPS_AUTO) {
             autoDetectFPS = true;
             LogString("Auto FPS detection enabled");
         } else {
             autoDetectFPS = false;
-            this.targetFPS = fps;
-            LogString("Target FPS set to: " + fps);
+            this.initialFPS = fps;
+            LogString("Initial FPS set to: " + fps);
         }
         updateFrameIntervals();
         resetState();
@@ -292,8 +326,8 @@ public class FrameGenerationEffect extends Effect {
         }
     }
 
-    public int getTargetFPS() {
-        return targetFPS;
+    public int getInitialFPS() {
+        return initialFPS;
     }
 
     public boolean isAutoDetectFPS() {
@@ -385,8 +419,11 @@ public class FrameGenerationEffect extends Effect {
                     texturePrev != -1 && textureCurr != -1) {
 
                 long timeSinceRealFrameNs = currentTimeNs - lastRealFrameTimeNs;
+
                 /*blendFactor = Math.min(1.0f, Math.max(0.0f,
-                        (float)timeSinceRealFrameNs / currentRealFrameIntervalNs));*/
+                    (float)timeSinceRealFrameNs / currentRealFrameIntervalNs));*/
+
+                calculateBlendFactor();
 
                 lastAnyFrameShownTimeNs = currentTimeNs;
 
@@ -497,6 +534,54 @@ public class FrameGenerationEffect extends Effect {
         return newTexture;
     }
 
+    private void updateBlendFactors() {
+        if (generationMode == MODE_FAST) {
+            blendFactorX3 = BLEND_FACTOR_X3_FAST;
+            blendFactorX4 = BLEND_FACTOR_X4_FAST;
+        } else {
+            blendFactorX3 = BLEND_FACTOR_X3_BALANCED;
+            blendFactorX4 = BLEND_FACTOR_X4_BALANCED;
+        }
+    }
+
+    private void calculateBlendFactor() {
+        if (fpsMultiplier == FPS_MULTIPLIER_X2) {
+            if (generationMode == MODE_FAST)
+                blendFactor = customBlendFactor * customBlendFactor;
+            else
+                blendFactor = customBlendFactor;
+        } else {
+            float frameFactor = (float) currentFrameDisplayCount / realFrameDisplayCount;
+
+            if (fpsMultiplier == FPS_MULTIPLIER_X3) {
+                if (realFrameDisplayCount > 1) {
+                    if (frameFactor <= 1.0)
+                        blendFactor = blendFactorX3;
+                    else
+                        blendFactor = blendFactorX3 * 2;
+                } else
+                    blendFactor = BLEND_FACTOR_X2;
+            } else if (fpsMultiplier == FPS_MULTIPLIER_X4) {
+                if (realFrameDisplayCount > 2) {
+                    if (frameFactor <= 1.0)
+                        blendFactor = blendFactorX4;
+                    else if (frameFactor <= 2.0)
+                        blendFactor = blendFactorX4 * 2;
+                    else
+                        blendFactor = blendFactorX4 * 3;
+                } else if (realFrameDisplayCount > 1) {
+                    if (frameFactor <= 1.0)
+                        blendFactor = blendFactorX3;
+                    else
+                        blendFactor = blendFactorX3 * 2;
+                } else
+                    blendFactor = BLEND_FACTOR_X2;
+            }
+        }
+        LogString("currentFrameDisplayCount = " + currentFrameDisplayCount +
+                " realFrameDisplayCount = " + realFrameDisplayCount + " blendFactor = " + blendFactor);
+    }
+
     public void resetState() {
         clearHistory();
         hasFirstFrame = false;
@@ -523,7 +608,7 @@ public class FrameGenerationEffect extends Effect {
         return hasFirstFrame && hasSecondFrame && texturePrev != -1 && textureCurr != -1;
     }
 
-    private class FastFrameGenerationMaterial extends ScreenMaterial {
+    private static class FastFrameGenerationMaterial extends ScreenMaterial {
         public FastFrameGenerationMaterial() {
             super();
         }
@@ -551,7 +636,6 @@ public class FrameGenerationEffect extends Effect {
                     "",
                     "        gl_FragColor = result;",
                     "    } else {",
-                    "        //gl_FragColor = texture2D(uTextureCurr, vUV);",
                     "        vec4 prev = texture2D(uTexturePrev, vUV);",
                     "        // Minimal post-processing",
                     "        float contrast = 1.04;",
@@ -563,8 +647,8 @@ public class FrameGenerationEffect extends Effect {
         }
     }
 
-    private class OptimizedFrameGenerationMaterial extends ScreenMaterial {
-        public OptimizedFrameGenerationMaterial() {
+    private static class BalancedFrameGenerationMaterial extends ScreenMaterial {
+        public BalancedFrameGenerationMaterial() {
             super();
         }
 
@@ -711,7 +795,6 @@ public class FrameGenerationEffect extends Effect {
                     "        gl_FragColor = clamp(generated, 0.0, 1.0);",
                     "    } else {",
                     "        // Real frame",
-                    "        //gl_FragColor = texture2D(uTextureCurr, uv);",
                     "        vec4 prev = texture2D(uTexturePrev, uv);",
                     "",
                     "        // Easy post-processing",
@@ -730,7 +813,7 @@ public class FrameGenerationEffect extends Effect {
         }
     }
 
-    private class QualityFrameGenerationMaterial extends ScreenMaterial {
+    private static class QualityFrameGenerationMaterial extends ScreenMaterial {
         public QualityFrameGenerationMaterial() {
             super();
         }
@@ -924,7 +1007,6 @@ public class FrameGenerationEffect extends Effect {
                     "// Main function",
                     "void main() {",
                     "    if (uIsEnabled != 1) {",
-                    "        //gl_FragColor = texture2D(uTextureCurr, vUV);",
                     "        vec4 prev = texture2D(uTexturePrev, vUV);",
                     "        // 3. Post-processing",
                     "        prev = enhancedColorCorrection(prev);",

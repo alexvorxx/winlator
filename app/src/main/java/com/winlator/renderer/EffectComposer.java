@@ -193,24 +193,7 @@ public class EffectComposer {
 
         material.use();
 
-        // FrameGenerationEffect only
-        if (effect instanceof FrameGenerationEffect) {
-            FrameGenerationEffect interpEffect = (FrameGenerationEffect) effect;
-            interpEffect.setupShaderUniforms();
-
-            GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
-            int[] boundTex1 = new int[1];
-            GLES20.glGetIntegerv(GLES20.GL_TEXTURE_BINDING_2D, boundTex1, 0);
-
-            GLES20.glActiveTexture(GLES20.GL_TEXTURE2);
-            int[] boundTex2 = new int[1];
-            GLES20.glGetIntegerv(GLES20.GL_TEXTURE_BINDING_2D, boundTex2, 0);
-
-            LogString("Textures bound - unit1: " + boundTex1[0] + ", unit2: " + boundTex2[0]);
-
-            GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-        } else {
-            // Other effects
+        if (!(effect instanceof FrameGenerationEffect)) {
             material.setUniformVec2("resolution", renderer.surfaceWidth, renderer.surfaceHeight);
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, readBuffer.getTextureId());
@@ -247,9 +230,9 @@ public class EffectComposer {
         renderer.xServerView.requestRender();
     }
 
-    public synchronized void configureFrameGeneration(int targetFPS, int mode) {
+    public synchronized void configureFrameGeneration(int initialFPS, int mode) {
         if (frameGenerationEffect != null) {
-            frameGenerationEffect.setTargetFPS(targetFPS);
+            frameGenerationEffect.setInitialFPS(initialFPS);
             frameGenerationEffect.setGenerationMode(mode);
         }
         renderer.xServerView.requestRender();
@@ -261,25 +244,24 @@ public class EffectComposer {
         }
     }
 
-    public void setGenerationMode(int mode) {
+    public void setFrameGenerationVariables(int generationMode, int fpsMultiplier, float blendFactor) {
         if (frameGenerationEffect != null) {
             if (frameGenerationEffect.isEnabled()) {
                 Log.d(TAG, "FrameGenerationEffect restart");
-                int targetFPS;
+                int initialFPS;
                 if (frameGenerationEffect.isAutoDetectFPS())
-                    targetFPS = 0;
+                    initialFPS = 0;
                 else
-                    targetFPS = frameGenerationEffect.getTargetFPS();
+                    initialFPS = frameGenerationEffect.getInitialFPS();
 
                 frameGenerationEffect.toggleGeneration();
                 removeEffect(frameGenerationEffect);
 
-                frameGenerationEffect = new FrameGenerationEffect();
+                frameGenerationEffect = new FrameGenerationEffect(generationMode, fpsMultiplier, blendFactor);
                 addEffect(frameGenerationEffect);
                 frameGenerationEffect.toggleGeneration();
-                frameGenerationEffect.setTargetFPS(targetFPS);
+                frameGenerationEffect.setInitialFPS(initialFPS);
             }
-            frameGenerationEffect.setGenerationMode(mode);
         }
     }
 
@@ -302,7 +284,7 @@ public class EffectComposer {
     public synchronized FrameGenerationSettings getFrameGenerationSettings() {
         if (frameGenerationEffect != null) {
             return new FrameGenerationSettings(
-                    frameGenerationEffect.getTargetFPS(),
+                    frameGenerationEffect.getInitialFPS(),
                     frameGenerationEffect.isAutoDetectFPS(),
                     frameGenerationEffect.getCurrentRealFrameInterval(),
                     frameGenerationEffect.getCurrentTargetFrameInterval()
@@ -312,14 +294,14 @@ public class EffectComposer {
     }
 
     public static class FrameGenerationSettings {
-        public final int targetFPS;
+        public final int initialFPS;
         public final boolean autoDetect;
         public final long realInterval;
         public final long targetInterval;
 
-        public FrameGenerationSettings(int targetFPS, boolean autoDetect,
+        public FrameGenerationSettings(int initialFPS, boolean autoDetect,
                                        long realInterval, long targetInterval) {
-            this.targetFPS = targetFPS;
+            this.initialFPS = initialFPS;
             this.autoDetect = autoDetect;
             this.realInterval = realInterval;
             this.targetInterval = targetInterval;

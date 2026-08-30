@@ -635,8 +635,7 @@
                             android:layout_height="wrap_content"
                             android:id="@+id/SSharpnessEffect"
                             style="@style/ComboBox"
-                            android:entries="@array/vkbasalt_sharpness_entries"
-                            android:spinnerMode="dialog" />
+                            android:entries="@array/vkbasalt_sharpness_entries" />
 
                         <LinearLayout
                             android:layout_width="match_parent"

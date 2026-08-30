@@ -516,8 +516,9 @@
     <string name="frame_generation" translatable="false">Генерация кадров</string>
     <string name="off">ВЫКЛ</string>
     <string name="on">ВКЛ</string>
-    <string name="target_fps">FPS:</string>
+    <string name="initial_fps">Нач. FPS:</string>
     <string name="generation_mode">Режим:</string>
+    <string name="fps_multiplier">Множитель:</string>
 
     <string name="install_drivers">Установить драйвер</string>
     <string name="install_drivers_message">Сейчас Вам будет предложено выбрать драйвер. Он должен быть таким же, как и в других эмуляторах (Yuzu, Dolphin, Citra, и т.д.).</string>

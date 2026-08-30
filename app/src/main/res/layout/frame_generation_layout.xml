@@ -30,14 +30,14 @@
             android:orientation="horizontal">
 
             <ImageButton
-                style="@style/ListMenuButton"
                 android:id="@+id/BTMove"
-                android:src="@drawable/icon_move"
-                android:layout_marginBottom="4dp" />
+                style="@style/ListMenuButton"
+                android:layout_marginBottom="4dp"
+                android:src="@drawable/icon_move" />
 
             <ImageButton
-                style="@style/ListMenuButton"
                 android:id="@+id/BTHide"
+                style="@style/ListMenuButton"
                 android:src="@drawable/icon_hide" />
 
             <ToggleButton
@@ -57,12 +57,13 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:orientation="vertical">
+        android:layout_gravity="end"
+        android:orientation="horizontal">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center_vertical"
+            android:layout_gravity="start"
             android:text="@string/generation_mode" />
 
         <Spinner
@@ -70,30 +71,55 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="start"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="0dp"
             android:layout_weight="1"
             android:visibility="visible" />
 
     </LinearLayout>
 
     <LinearLayout
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_gravity="end"
         android:layout_marginTop="8dp"
-        android:orientation="vertical">
+        android:orientation="horizontal">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center_vertical"
-            android:text="@string/target_fps" />
+            android:layout_gravity="start"
+            android:text="@string/fps_multiplier" />
+
+        <Spinner
+            android:id="@+id/fps_multiplier_spinner"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="start"
+            android:layout_marginStart="0dp"
+            android:layout_weight="1"
+            android:visibility="visible" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="start"
+            android:text="@string/initial_fps" />
 
         <Spinner
             android:id="@+id/fps_spinner"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="start"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="0dp"
             android:layout_weight="1"
             android:visibility="visible" />
 
@@ -106,6 +132,33 @@
         android:layout_marginTop="4dp"
         android:text="@string/current_fps"
         android:textColor="#666"
+        android:layout_gravity="center"
         android:textSize="12sp" />
+
+
+    <LinearLayout
+        android:id="@+id/LLBlendFactor"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end"
+        android:layout_marginTop="8dp"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/TVBlendFactorLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="start" />
+
+        <SeekBar
+            android:id="@+id/SBBlendFactor"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="start"
+            android:layout_marginStart="0dp"
+            android:layout_weight="1"
+            android:visibility="visible" />
+
+    </LinearLayout>
 
 </LinearLayout>
