@@ -1,37 +1,42 @@
 package com.winlator.renderer.effects;
 
+import android.opengl.GLES20;
+import android.opengl.GLES30;
+import android.util.Log;
+
 import com.winlator.renderer.EffectComposer;
 import com.winlator.renderer.material.ScreenMaterial;
 import com.winlator.renderer.material.ShaderMaterial;
-import android.opengl.GLES20;
-import android.util.Log;
+
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.FloatBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
 public class FrameGenerationEffect extends Effect {
-    public static final int MODE_FAST = 0;
-    public static final int MODE_BALANCED = 1;
-    public static final int MODE_QUALITY = 2;
+    public static final int GENERATION_MODE_FAST = 0;
+    public static final int GENERATION_MODE_BALANCED = 1;
+    public static final int GENERATION_MODE_QUALITY = 2;
 
-    public static final float DEFAULT_BLEND_FACTOR = 0.75f;
+    public static final float DEFAULT_BLEND_SCALE = 1.00f;
     public static final float BLEND_FACTOR_X2 = 0.50f;
-    public static final float BLEND_FACTOR_X3_FAST = 0.33f;
-    public static final float BLEND_FACTOR_X4_FAST = 0.25f;
-    public static final float BLEND_FACTOR_X3_BALANCED = 0.45f;
-    public static final float BLEND_FACTOR_X4_BALANCED = 0.30f;
+    public static final float BLEND_FACTOR_X3 = 0.33f;
+    public static final float BLEND_FACTOR_X4 = 0.25f;
 
     public static final int FPS_MULTIPLIER_X2 = 2;
     public static final int FPS_MULTIPLIER_X3 = 3;
     public static final int FPS_MULTIPLIER_X4 = 4;
 
-    private int fpsMultiplier;
+    public static final int API_GLES20 = 0;
+    public static final int API_QUALCOMM = 1;
 
+    private int fpsMultiplier;
     private int generationMode;
 
     private static final long NANOS_PER_SECOND = 1_000_000_000L;
     private static final long NANOS_PER_MILLISECOND = 1_000_000L;
 
-    // Timing
     private long lastRealFrameTimeNs = 0;
     private long lastAnyFrameShownTimeNs = 0;
     private long nextFrameTimeNs = 0;
@@ -39,26 +44,25 @@ public class FrameGenerationEffect extends Effect {
     private long currentRealFrameIntervalNs = 33333333;  // 30 FPS
     private long currentTargetFrameIntervalNs = 16666666;  // 60 FPS
 
-    private static final long MIN_FRAME_INTERVAL_NS = 8 * NANOS_PER_MILLISECOND;  // 8ms
-    private static final long MAX_FRAME_INTERVAL_NS = 1000 * NANOS_PER_MILLISECOND;  // 1000ms
+    private static final long MIN_FRAME_INTERVAL_NS = 8 * NANOS_PER_MILLISECOND;
+    private static final long MAX_FRAME_INTERVAL_NS = 1000 * NANOS_PER_MILLISECOND;
 
     private boolean isEnabled = false;
 
+    private int apiMode;
+    private boolean usePostProcessing;
+    private boolean blendModeAuto;
     private float blendFactor;
+    private float blendScale;
 
-    private float customBlendFactor;
-    private float blendFactorX3, blendFactorX4;
-
-    // Buffers for frames
+    private int textureHistory = -1;
     private int texturePrev = -1;
     private int textureCurr = -1;
 
-    // Flags
     private boolean hasFirstFrame = false;
     private boolean hasSecondFrame = false;
     private boolean waitingForSecondFrame = true;
 
-    // FPS
     public static final int FPS_AUTO = 0;
     public static final int FPS_15 = 15;
     public static final int FPS_20 = 20;
@@ -75,21 +79,36 @@ public class FrameGenerationEffect extends Effect {
 
     private static final String TAG = "FrameGeneration";
 
-    // Uniform locations
-    //private boolean uniformsCached = false;
     public int uIsEnabledLoc = -1;
     private int uBlendFactorLoc = -1;
+    private int uTextureHistoryLoc = -1;
     private int uTexturePrevLoc = -1;
     private int uTextureCurrLoc = -1;
     private int uResolutionLoc = -1;
+    private int uUsePostProc = -1;
 
-    // Display refresh rate
-    private int displayRefreshRate = 60; // 60 Hz
+    // QCOM fields
+    private boolean hasMotionEstimation = false;
+    private boolean useHardwareMotion = false;
+
+    private int qcomMotionTexture = -1;      // RGBA16F for motion vectors
+    private int qcomRefLuminanceTexture = -1;   // R8 luminance of prev frame
+    private int qcomTargetLuminanceTexture = -1; // R8 luminance of curr frame
+    private int qcomLuminanceFBO = -1;       // FBO for luminance copy
+    private int qcomLuminanceProgram = -1;   // shader program for luminance copy
+
+    private int qcomSearchBlockX = 1;
+    private int qcomSearchBlockY = 1;
+
+    // Uniform locations for hardware paths
+    private int uMotionTextureLoc = -1;
+    private int uUseHardwareMotionLoc = -1;
+
+    private int displayRefreshRate = 60;
     private int realFrameDisplayCount = 0;
     private int generatedFrameDisplayCount = 0;
 
-    // Current frame to display
-    private int currentDisplayFrameType = 0; // 0 - real, 1 - generated
+    private int currentDisplayFrameType = 0;
     private int currentFrameDisplayCount = 0;
 
     private int currentSequence = 0;
@@ -104,34 +123,90 @@ public class FrameGenerationEffect extends Effect {
     private int currentWidth = 0;
     private int currentHeight = 0;
 
+    private boolean qcomInitialized = false;
+
+    // Native methods (return boolean for init success)
+    private static native boolean nativeInitQCOM();
+    private static native void nativeTexEstimateMotionQCOM(int ref, int target, int output);
+
+    static {
+        System.loadLibrary("winlator");
+    }
+
     private void LogString(String message) {
         if (EffectComposer.logEnabled)
             Log.d(TAG, message);
     }
 
-    public FrameGenerationEffect(int generationMode, int fpsMultiplier, float customBlendFactor) {
+    public FrameGenerationEffect(int generationMode, int fpsMultiplier, int apiMode, boolean enablePostProcessing, boolean blendModeAuto, float blendScale) {
         super();
         this.generationMode = generationMode;
         this.fpsMultiplier = fpsMultiplier;
-        this.customBlendFactor = customBlendFactor;
+        this.apiMode = apiMode;
+        this.usePostProcessing = enablePostProcessing;
+        this.blendModeAuto = blendModeAuto;
+        this.blendScale = blendScale;
 
         updateFrameIntervals();
         calculateDisplayCounts();
-        updateBlendFactors();
         Log.d(TAG, "FrameGenerationEffect created with generationMode = " + generationMode +
-                " fpsMultiplier = " + fpsMultiplier + " customBlendFactor = " + customBlendFactor );
+                " fpsMultiplier = " + fpsMultiplier + " apiMode = " + apiMode + " usePostProcessing" +
+                usePostProcessing + " blendModeAuto = " + blendModeAuto + " blendScale = " + blendScale);
+    }
+
+    /**
+     * Initializes QCOM extensions if present on the device.
+     * Must be called on the GL thread.
+     */
+    private void initQCOMIfNeeded() {
+        if (apiMode == API_GLES20) {
+            Log.d(TAG, "GLES 2.0 initialized");
+            return;
+        }
+
+        String extensions = GLES20.glGetString(GLES20.GL_EXTENSIONS);
+        if (extensions == null) {
+            Log.d(TAG, "GL_EXTENSIONS returned null, cannot check QCOM support");
+            return;
+        }
+
+        boolean motionEstSupported = extensions.contains("GL_QCOM_motion_estimation");
+
+        if (!motionEstSupported) {
+            Log.d(TAG, "GL_QCOM_motion_estimation not supported, fallback to GLES 2.0");
+            return;
+        }
+
+        boolean qcomInitSuccess = nativeInitQCOM();
+
+        if (motionEstSupported && qcomInitSuccess) {
+            // Check GLES3 for required formats
+            String version = GLES20.glGetString(GLES20.GL_VERSION);
+            if (version != null && version.contains("OpenGL ES 3.")) {
+                hasMotionEstimation = true;
+                // Query search block size
+                int[] blockSize = new int[2];
+                GLES20.glGetIntegerv(0x8C90, blockSize, 0); // MOTION_ESTIMATION_SEARCH_BLOCK_X_QCOM
+                GLES20.glGetIntegerv(0x8C91, blockSize, 1); // MOTION_ESTIMATION_SEARCH_BLOCK_Y_QCOM
+                qcomSearchBlockX = Math.max(1, blockSize[0]);
+                qcomSearchBlockY = Math.max(1, blockSize[1]);
+                Log.d(TAG, "QCOM_motion_estimation supported, block=" + qcomSearchBlockX + "x" + qcomSearchBlockY);
+            } else {
+                Log.d(TAG, "QCOM_motion_estimation found but requires GLES3, ignoring");
+            }
+        }
     }
 
     @Override
     protected ShaderMaterial createMaterial() {
         switch (generationMode) {
-            case MODE_FAST:
+            case GENERATION_MODE_FAST:
                 Log.d(TAG, "Fast generation mode selected");
                 return new FastFrameGenerationMaterial();
-            case MODE_QUALITY:
+            case GENERATION_MODE_QUALITY:
                 Log.d(TAG, "Quality generation mode selected");
                 return new QualityFrameGenerationMaterial();
-            case MODE_BALANCED:
+            case GENERATION_MODE_BALANCED:
             default:
                 Log.d(TAG, "Balanced generation mode selected");
                 return new BalancedFrameGenerationMaterial();
@@ -141,29 +216,40 @@ public class FrameGenerationEffect extends Effect {
     public void setGenerationMode(int mode) {
         if (this.generationMode != mode) {
             this.generationMode = mode;
-
             cleanup();
             resetState();
-            updateBlendFactors();
         }
     }
 
-    public int getGenerationMode() {
-        return generationMode;
-    }
-
-    public void setBlendFactor(float customBlendFactor) {
-        if (this.customBlendFactor != customBlendFactor) {
-            this.customBlendFactor = customBlendFactor;
-            LogString("customBlendFactor = " + customBlendFactor);
+    public void setBlendScale(float blendScale) {
+        if (this.blendScale != blendScale) {
+            this.blendScale = blendScale;
+            LogString("blendScale = " + blendScale);
         }
     }
 
-    public float getBlendFactor() {
-        return customBlendFactor;
+    public void setApiMode(int apiMode) {
+        if (this.apiMode != apiMode) {
+            this.apiMode = apiMode;
+            LogString("blendModeAuto = " + apiMode);
+        }
     }
 
-    public void setFpsMultiplier (int fpsMultiplier) {
+    public void setUsePostProcessing(boolean usePostProcessing) {
+        if (this.usePostProcessing != usePostProcessing) {
+            this.usePostProcessing = usePostProcessing;
+            LogString("usePostProcessing = " + usePostProcessing);
+        }
+    }
+
+    public void setBlendMode(boolean blendModeAuto) {
+        if (this.blendModeAuto != blendModeAuto) {
+            this.blendModeAuto = blendModeAuto;
+            LogString("blendModeAuto = " + blendModeAuto);
+        }
+    }
+
+    public void setFpsMultiplier(int fpsMultiplier) {
         if (this.fpsMultiplier != fpsMultiplier) {
             this.fpsMultiplier = fpsMultiplier;
             cleanup();
@@ -196,6 +282,8 @@ public class FrameGenerationEffect extends Effect {
 
             currentRealFrameCaptured = false;
             currentRealFrameIndex = 0;
+        } else {
+            useHardwareMotion = false;
         }
     }
 
@@ -218,7 +306,6 @@ public class FrameGenerationEffect extends Effect {
         long frameDurationNs = NANOS_PER_SECOND / displayRefreshRate;
 
         realFrameDisplayCount = (int) Math.max(1, currentTargetFrameIntervalNs / frameDurationNs);
-
         generatedFrameDisplayCount = (int) Math.max(1, currentTargetFrameIntervalNs / frameDurationNs * (fpsMultiplier - 1));
 
         LogString(String.format("Display counts: real=%d, generated=%d (refresh rate=%d Hz)",
@@ -226,6 +313,9 @@ public class FrameGenerationEffect extends Effect {
     }
 
     private void clearHistory() {
+        if (textureHistory != -1) {
+            GLES20.glDeleteTextures(1, new int[]{textureHistory}, 0);
+        }
         if (texturePrev != -1) {
             GLES20.glDeleteTextures(1, new int[]{texturePrev}, 0);
         }
@@ -235,6 +325,7 @@ public class FrameGenerationEffect extends Effect {
         if (capturedRealFrame != -1) {
             GLES20.glDeleteTextures(1, new int[]{capturedRealFrame}, 0);
         }
+        textureHistory = -1;
         texturePrev = -1;
         textureCurr = -1;
         capturedRealFrame = -1;
@@ -277,9 +368,10 @@ public class FrameGenerationEffect extends Effect {
             currentRealFrameCaptured = false;
 
             if (hasCapturedFrame && capturedRealFrame != -1) {
-                if (texturePrev != -1) {
-                    GLES20.glDeleteTextures(1, new int[]{texturePrev}, 0);
+                if (textureHistory != -1) {
+                    GLES20.glDeleteTextures(1, new int[]{textureHistory}, 0);
                 }
+                textureHistory = texturePrev;
                 texturePrev = textureCurr;
                 textureCurr = capturedRealFrame;
                 capturedRealFrame = -1;
@@ -345,12 +437,16 @@ public class FrameGenerationEffect extends Effect {
     public void prepareFrame(int width, int height, int sequence) {
         this.currentWidth = width;
         this.currentHeight = height;
-
         this.currentSequence = sequence;
 
         if (!isEnabled) return;
 
         long currentTimeNs = System.nanoTime();
+
+        if (!qcomInitialized && width > 0 && height > 0) {
+            initQCOMIfNeeded();
+            qcomInitialized = true;
+        }
 
         if (sequence == 0) {
             // Real frame
@@ -420,18 +516,36 @@ public class FrameGenerationEffect extends Effect {
 
                 long timeSinceRealFrameNs = currentTimeNs - lastRealFrameTimeNs;
 
-                /*blendFactor = Math.min(1.0f, Math.max(0.0f,
-                    (float)timeSinceRealFrameNs / currentRealFrameIntervalNs));*/
-
-                calculateBlendFactor();
+                if (blendModeAuto)
+                    blendFactor = Math.min(1.0f, Math.max(0.0f, (float)timeSinceRealFrameNs / currentRealFrameIntervalNs));
+                else
+                    calculateBlendFactor();
 
                 lastAnyFrameShownTimeNs = currentTimeNs;
 
-                LogString(String.format("Generated: prev=%d, curr=%d, blend=%.3f (time since real: %.2fms)",
-                        texturePrev, textureCurr, blendFactor,
-                        timeSinceRealFrameNs / (double)NANOS_PER_MILLISECOND));
+                // Hardware path selection
+                useHardwareMotion = false;
+
+                if (hasMotionEstimation) {
+                    ensureQCOMMotionTextures(width, height);
+                    if (qcomRefLuminanceTexture != -1 && qcomTargetLuminanceTexture != -1 &&
+                            qcomMotionTexture != -1) {
+                        // Convert textures to luminance
+                        copyTextureToR8(texturePrev, qcomRefLuminanceTexture, width, height);
+                        copyTextureToR8(textureCurr, qcomTargetLuminanceTexture, width, height);
+
+                        // Run motion estimation
+                        nativeTexEstimateMotionQCOM(qcomRefLuminanceTexture, qcomTargetLuminanceTexture, qcomMotionTexture);
+                        useHardwareMotion = true;
+                        LogString("Using hardware motion estimation");
+                    }
+                }
+
+                LogString(String.format("Generated: prev=%d, curr=%d, blend=%.3f (time since real: %.2fms), hwMotion=%b",
+                        texturePrev, textureCurr, blendFactor, timeSinceRealFrameNs / (double)NANOS_PER_MILLISECOND, useHardwareMotion));
             } else {
                 LogString("Not enough frames for generation yet");
+                useHardwareMotion = false;
             }
         }
     }
@@ -442,17 +556,20 @@ public class FrameGenerationEffect extends Effect {
 
         int program = material.getProgram();
 
+        // Initialize uniform locations
         if (uIsEnabledLoc == -1) {
-            //if (!uniformsCached) {
-                uIsEnabledLoc = GLES20.glGetUniformLocation(program, "uIsEnabled");
-                uBlendFactorLoc = GLES20.glGetUniformLocation(program, "uBlendFactor");
-                uTexturePrevLoc = GLES20.glGetUniformLocation(program, "uTexturePrev");
-                uTextureCurrLoc = GLES20.glGetUniformLocation(program, "uTextureCurr");
-                uResolutionLoc = GLES20.glGetUniformLocation(program, "resolution");
-                //uniformsCached = true;
-            //}
+            uIsEnabledLoc = GLES20.glGetUniformLocation(program, "uIsEnabled");
+            uBlendFactorLoc = GLES20.glGetUniformLocation(program, "uBlendFactor");
+            uTextureHistoryLoc = GLES20.glGetUniformLocation(program, "uTextureHistory");
+            uTexturePrevLoc = GLES20.glGetUniformLocation(program, "uTexturePrev");
+            uTextureCurrLoc = GLES20.glGetUniformLocation(program, "uTextureCurr");
+            uResolutionLoc = GLES20.glGetUniformLocation(program, "resolution");
+            uUsePostProc = GLES20.glGetUniformLocation(program, "uUsePostProc");
+            uMotionTextureLoc = GLES20.glGetUniformLocation(program, "uMotionTexture");
+            uUseHardwareMotionLoc = GLES20.glGetUniformLocation(program, "uUseHardwareMotion");
         }
 
+        // Bind prev texture to unit 1
         GLES20.glActiveTexture(GLES20.GL_TEXTURE1);
         if (texturePrev != -1) {
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texturePrev);
@@ -461,6 +578,7 @@ public class FrameGenerationEffect extends Effect {
         }
         GLES20.glUniform1i(uTexturePrevLoc, 1);
 
+        // Bind curr texture to unit 2
         GLES20.glActiveTexture(GLES20.GL_TEXTURE2);
         if (textureCurr != -1) {
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureCurr);
@@ -469,12 +587,38 @@ public class FrameGenerationEffect extends Effect {
         }
         GLES20.glUniform1i(uTextureCurrLoc, 2);
 
+        // Bind history texture to unit 3
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE3);
+        if (textureHistory != -1) {
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureHistory);
+        } else {
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+        }
+        GLES20.glUniform1i(uTextureHistoryLoc, 3);
+
+        // Bind motion texture if available (unit 4)
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE4);
+        if (useHardwareMotion && qcomMotionTexture != -1) {
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, qcomMotionTexture);
+        } else {
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+        }
+        if (uMotionTextureLoc != -1)
+            GLES20.glUniform1i(uMotionTextureLoc, 4);
+
         if (uResolutionLoc != -1 && currentWidth > 0 && currentHeight > 0) {
             GLES20.glUniform2f(uResolutionLoc, currentWidth, currentHeight);
         }
 
+        if (uUsePostProc != -1)
+            GLES20.glUniform1i(uUsePostProc, usePostProcessing ? 1 : 0);
+
+        // Default flags
         GLES20.glUniform1i(uIsEnabledLoc, 0);
         GLES20.glUniform1f(uBlendFactorLoc, 0.0f);
+
+        if (uUseHardwareMotionLoc != -1)
+            GLES20.glUniform1i(uUseHardwareMotionLoc, 0);
 
         if (isEnabled && currentSequence == 1) {
             boolean canShowGenerated = texturePrev != -1 && textureCurr != -1 && !waitingForSecondFrame;
@@ -483,18 +627,24 @@ public class FrameGenerationEffect extends Effect {
                 GLES20.glUniform1i(uIsEnabledLoc, 1);
                 GLES20.glUniform1f(uBlendFactorLoc, blendFactor);
 
+                if (useHardwareMotion && uUseHardwareMotionLoc != -1) {
+                    GLES20.glUniform1i(uUseHardwareMotionLoc, 1);
+                }
+
                 long currentTimeNs = System.nanoTime();
                 long timeSinceRealNs = currentTimeNs - lastRealFrameTimeNs;
-                LogString(String.format("Showing GENERATED frame, resolution=%dx%d, blend=%.3f (%.2fms since real)",
-                        currentWidth, currentHeight, blendFactor, timeSinceRealNs / (double)NANOS_PER_MILLISECOND));
+                LogString(String.format("Showing GENERATED frame, resolution=%dx%d, blend=%.3f (%.2fms since real), hwMotion=%b",
+                        currentWidth, currentHeight, blendFactor, timeSinceRealNs / (double)NANOS_PER_MILLISECOND, useHardwareMotion));
             } else {
                 LogString("Cannot show generated, showing REAL frame instead");
                 GLES20.glUniform1i(uIsEnabledLoc, 0);
                 GLES20.glUniform1f(uBlendFactorLoc, 0.0f);
+                GLES20.glUniform1i(uUseHardwareMotionLoc, 0);
             }
         } else {
             GLES20.glUniform1i(uIsEnabledLoc, 0);
             GLES20.glUniform1f(uBlendFactorLoc, 0.0f);
+            GLES20.glUniform1i(uUseHardwareMotionLoc, 0);
             LogString(String.format("Showing REAL frame, resolution=%dx%d (sequence=%d, enabled=%b)",
                     currentWidth, currentHeight, currentSequence, isEnabled));
         }
@@ -504,7 +654,31 @@ public class FrameGenerationEffect extends Effect {
 
     public void cleanup() {
         clearHistory();
+        deleteQCOMResources();
         LogString("Effect cleaned up");
+    }
+
+    private void deleteQCOMResources() {
+        if (qcomMotionTexture != -1) {
+            GLES20.glDeleteTextures(1, new int[]{qcomMotionTexture}, 0);
+            qcomMotionTexture = -1;
+        }
+        if (qcomRefLuminanceTexture != -1) {
+            GLES20.glDeleteTextures(1, new int[]{qcomRefLuminanceTexture}, 0);
+            qcomRefLuminanceTexture = -1;
+        }
+        if (qcomTargetLuminanceTexture != -1) {
+            GLES20.glDeleteTextures(1, new int[]{qcomTargetLuminanceTexture}, 0);
+            qcomTargetLuminanceTexture = -1;
+        }
+        if (qcomLuminanceFBO != -1) {
+            GLES20.glDeleteFramebuffers(1, new int[]{qcomLuminanceFBO}, 0);
+            qcomLuminanceFBO = -1;
+        }
+        if (qcomLuminanceProgram != -1) {
+            GLES20.glDeleteProgram(qcomLuminanceProgram);
+            qcomLuminanceProgram = -1;
+        }
     }
 
     public boolean isEnabled() { return isEnabled; }
@@ -517,9 +691,10 @@ public class FrameGenerationEffect extends Effect {
         int newTexture = textures[0];
 
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, newTexture);
+
         GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA,
-                width, height, 0, GLES20.GL_RGBA,
-                GLES20.GL_UNSIGNED_BYTE, null);
+                    width, height, 0, GLES20.GL_RGBA,
+                    GLES20.GL_UNSIGNED_BYTE, null);
 
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
@@ -534,48 +709,34 @@ public class FrameGenerationEffect extends Effect {
         return newTexture;
     }
 
-    private void updateBlendFactors() {
-        if (generationMode == MODE_FAST) {
-            blendFactorX3 = BLEND_FACTOR_X3_FAST;
-            blendFactorX4 = BLEND_FACTOR_X4_FAST;
-        } else {
-            blendFactorX3 = BLEND_FACTOR_X3_BALANCED;
-            blendFactorX4 = BLEND_FACTOR_X4_BALANCED;
-        }
-    }
-
     private void calculateBlendFactor() {
         if (fpsMultiplier == FPS_MULTIPLIER_X2) {
-            if (generationMode == MODE_FAST)
-                blendFactor = customBlendFactor * customBlendFactor;
-            else
-                blendFactor = customBlendFactor;
+            blendFactor = BLEND_FACTOR_X2 * blendScale;
         } else {
             float frameFactor = (float) currentFrameDisplayCount / realFrameDisplayCount;
-
             if (fpsMultiplier == FPS_MULTIPLIER_X3) {
                 if (realFrameDisplayCount > 1) {
                     if (frameFactor <= 1.0)
-                        blendFactor = blendFactorX3;
+                        blendFactor = BLEND_FACTOR_X3 * blendScale;
                     else
-                        blendFactor = blendFactorX3 * 2;
+                        blendFactor = Math.min(1.0f, BLEND_FACTOR_X3 * blendScale * 2);
                 } else
-                    blendFactor = BLEND_FACTOR_X2;
+                    blendFactor = BLEND_FACTOR_X2 * blendScale;
             } else if (fpsMultiplier == FPS_MULTIPLIER_X4) {
                 if (realFrameDisplayCount > 2) {
                     if (frameFactor <= 1.0)
-                        blendFactor = blendFactorX4;
+                        blendFactor = BLEND_FACTOR_X4 * blendScale;
                     else if (frameFactor <= 2.0)
-                        blendFactor = blendFactorX4 * 2;
+                        blendFactor = BLEND_FACTOR_X4 * blendScale * 2;
                     else
-                        blendFactor = blendFactorX4 * 3;
+                        blendFactor = Math.min(1.0f, BLEND_FACTOR_X4 * blendScale * 3);
                 } else if (realFrameDisplayCount > 1) {
                     if (frameFactor <= 1.0)
-                        blendFactor = blendFactorX3;
+                        blendFactor = BLEND_FACTOR_X3 * blendScale;
                     else
-                        blendFactor = blendFactorX3 * 2;
+                        blendFactor = Math.min(1.0f, BLEND_FACTOR_X3 * blendScale * 2);
                 } else
-                    blendFactor = BLEND_FACTOR_X2;
+                    blendFactor = BLEND_FACTOR_X2 * blendScale;
             }
         }
         LogString("currentFrameDisplayCount = " + currentFrameDisplayCount +
@@ -608,6 +769,162 @@ public class FrameGenerationEffect extends Effect {
         return hasFirstFrame && hasSecondFrame && texturePrev != -1 && textureCurr != -1;
     }
 
+    private void ensureQCOMMotionTextures(int width, int height) {
+        int motionWidth = Math.max(1, width / qcomSearchBlockX);
+        int motionHeight = Math.max(1, height / qcomSearchBlockY);
+
+        // Create luminance textures (R8)
+        if (qcomRefLuminanceTexture == -1) {
+            int[] tex = new int[1];
+            GLES20.glGenTextures(1, tex, 0);
+            qcomRefLuminanceTexture = tex[0];
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, qcomRefLuminanceTexture);
+            GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES30.GL_R8, width, height, 0,
+                    GLES30.GL_RED, GLES20.GL_UNSIGNED_BYTE, null);
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
+        }
+        if (qcomTargetLuminanceTexture == -1) {
+            int[] tex = new int[1];
+            GLES20.glGenTextures(1, tex, 0);
+            qcomTargetLuminanceTexture = tex[0];
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, qcomTargetLuminanceTexture);
+            GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES30.GL_R8, width, height, 0,
+                    GLES30.GL_RED, GLES20.GL_UNSIGNED_BYTE, null);
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
+        }
+
+        // Create motion output texture (RGBA16F)
+        if (qcomMotionTexture == -1) {
+            int[] tex = new int[1];
+            GLES20.glGenTextures(1, tex, 0);
+            qcomMotionTexture = tex[0];
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, qcomMotionTexture);
+            GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES30.GL_RGBA16F, motionWidth, motionHeight, 0,
+                    GLES30.GL_RGBA, GLES30.GL_HALF_FLOAT, null);
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST);
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST);
+        }
+
+        // Create FBO for luminance copy if needed
+        if (qcomLuminanceFBO == -1) {
+            int[] fbo = new int[1];
+            GLES20.glGenFramebuffers(1, fbo, 0);
+            qcomLuminanceFBO = fbo[0];
+        }
+        if (qcomLuminanceProgram == -1) {
+            qcomLuminanceProgram = createLuminanceCopyProgram();
+        }
+    }
+
+    private int createLuminanceCopyProgram() {
+        String vertexShaderSrc =
+                "attribute vec2 aPosition;\n" +
+                        "varying vec2 vUV;\n" +
+                        "void main() {\n" +
+                        "    vUV = aPosition * 0.5 + 0.5;\n" +
+                        "    gl_Position = vec4(aPosition, 0.0, 1.0);\n" +
+                        "}\n";
+
+        String fragmentShaderSrc =
+                "precision mediump float;\n" +
+                        "varying vec2 vUV;\n" +
+                        "uniform sampler2D uSrcTexture;\n" +
+                        "void main() {\n" +
+                        "    vec3 rgb = texture2D(uSrcTexture, vUV).rgb;\n" +
+                        "    float luma = dot(rgb, vec3(0.299, 0.587, 0.114));\n" +
+                        "    gl_FragColor = vec4(luma, 0.0, 0.0, 1.0);\n" +
+                        "}\n";
+
+        int vs = compileShader(GLES20.GL_VERTEX_SHADER, vertexShaderSrc);
+        int fs = compileShader(GLES20.GL_FRAGMENT_SHADER, fragmentShaderSrc);
+        if (vs == 0 || fs == 0) return -1;
+
+        int program = GLES20.glCreateProgram();
+        GLES20.glAttachShader(program, vs);
+        GLES20.glAttachShader(program, fs);
+        GLES20.glLinkProgram(program);
+
+        int[] linkStatus = new int[1];
+        GLES20.glGetProgramiv(program, GLES20.GL_LINK_STATUS, linkStatus, 0);
+        if (linkStatus[0] == 0) {
+            Log.e(TAG, "Failed to link luminance copy program");
+            GLES20.glDeleteProgram(program);
+            return -1;
+        }
+
+        GLES20.glDeleteShader(vs);
+        GLES20.glDeleteShader(fs);
+        return program;
+    }
+
+    private int compileShader(int type, String src) {
+        int shader = GLES20.glCreateShader(type);
+        GLES20.glShaderSource(shader, src);
+        GLES20.glCompileShader(shader);
+        int[] status = new int[1];
+        GLES20.glGetShaderiv(shader, GLES20.GL_COMPILE_STATUS, status, 0);
+        if (status[0] == 0) {
+            Log.e(TAG, "Shader compile error: " + GLES20.glGetShaderInfoLog(shader));
+            GLES20.glDeleteShader(shader);
+            return 0;
+        }
+        return shader;
+    }
+
+    private void copyTextureToR8(int srcTexture, int dstTexture, int width, int height) {
+        if (srcTexture == -1 || dstTexture == -1 || qcomLuminanceFBO == -1 || qcomLuminanceProgram == -1)
+            return;
+
+        // Save current FBO binding
+        int[] prevFBO = new int[1];
+        GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, prevFBO, 0);
+
+        // Bind our FBO and attach destination
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, qcomLuminanceFBO);
+        GLES20.glFramebufferTexture2D(GLES20.GL_FRAMEBUFFER, GLES20.GL_COLOR_ATTACHMENT0,
+                GLES20.GL_TEXTURE_2D, dstTexture, 0);
+        int status = GLES20.glCheckFramebufferStatus(GLES20.GL_FRAMEBUFFER);
+        if (status != GLES20.GL_FRAMEBUFFER_COMPLETE) {
+            Log.e(TAG, "Luminance FBO incomplete: " + status);
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, prevFBO[0]);
+            return;
+        }
+
+        GLES20.glViewport(0, 0, width, height);
+        GLES20.glUseProgram(qcomLuminanceProgram);
+
+        // Bind source texture to unit 0
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, srcTexture);
+        int uSrcLoc = GLES20.glGetUniformLocation(qcomLuminanceProgram, "uSrcTexture");
+        GLES20.glUniform1i(uSrcLoc, 0);
+
+        // Draw fullscreen quad
+        float[] vertices = {
+                -1.0f, -1.0f,
+                1.0f, -1.0f,
+                -1.0f,  1.0f,
+                1.0f,  1.0f
+        };
+        FloatBuffer vertexBuffer = ByteBuffer.allocateDirect(vertices.length * 4)
+                .order(ByteOrder.nativeOrder()).asFloatBuffer();
+        vertexBuffer.put(vertices).position(0);
+
+        int aPositionLoc = GLES20.glGetAttribLocation(qcomLuminanceProgram, "aPosition");
+        GLES20.glEnableVertexAttribArray(aPositionLoc);
+        GLES20.glVertexAttribPointer(aPositionLoc, 2, GLES20.GL_FLOAT, false, 0, vertexBuffer);
+
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
+
+        GLES20.glDisableVertexAttribArray(aPositionLoc);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+
+        // Restore previous FBO
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, prevFBO[0]);
+    }
+
     private static class FastFrameGenerationMaterial extends ScreenMaterial {
         public FastFrameGenerationMaterial() {
             super();
@@ -622,24 +939,24 @@ public class FrameGenerationEffect extends Effect {
                     "uniform sampler2D uTextureCurr;",
                     "uniform int uIsEnabled;",
                     "uniform float uBlendFactor;",
+                    "uniform int uUsePostProc;",
                     "",
                     "void main() {",
                     "    if (uIsEnabled == 1) {",
-                    "        // Simple linear mixing",
                     "        vec4 prev = texture2D(uTexturePrev, vUV);",
                     "        vec4 curr = texture2D(uTextureCurr, vUV);",
                     "        vec4 result = mix(prev, curr, uBlendFactor);",
-                    "",
-                    "        // Minimal post-processing",
-                    "        float contrast = 1.04;",
-                    "        result.rgb = ((result.rgb - 0.5) * contrast) + 0.5;",
-                    "",
+                    "        if (uUsePostProc == 1) {",
+                    "            float contrast = 1.04;",
+                    "            result.rgb = ((result.rgb - 0.5) * contrast) + 0.5;",
+                    "        }",
                     "        gl_FragColor = result;",
                     "    } else {",
                     "        vec4 prev = texture2D(uTexturePrev, vUV);",
-                    "        // Minimal post-processing",
-                    "        float contrast = 1.04;",
-                    "        prev.rgb = ((prev.rgb - 0.5) * contrast) + 0.5;",
+                    "        if (uUsePostProc == 1) {",
+                    "            float contrast = 1.04;",
+                    "            prev.rgb = ((prev.rgb - 0.5) * contrast) + 0.5;",
+                    "        }",
                     "        gl_FragColor = prev;",
                     "    }",
                     "}"
@@ -648,114 +965,81 @@ public class FrameGenerationEffect extends Effect {
     }
 
     private static class BalancedFrameGenerationMaterial extends ScreenMaterial {
-        public BalancedFrameGenerationMaterial() {
-            super();
-        }
-
         @Override
         protected String getFragmentShader() {
             return String.join("\n", new CharSequence[]{
                     "precision mediump float;",
                     "varying vec2 vUV;",
+                    "uniform sampler2D uTextureHistory;",
                     "uniform sampler2D uTexturePrev;",
                     "uniform sampler2D uTextureCurr;",
+                    "uniform sampler2D uMotionTexture;",
                     "uniform int uIsEnabled;",
+                    "uniform int uUseHardwareMotion;",
                     "uniform float uBlendFactor;",
                     "uniform vec2 resolution;",
-                    "",
-                    "// Quick motion assessment (simplified version)",
+                    "uniform int uUsePostProc;",
+
                     "vec2 fastMotionEstimate(vec2 uv) {",
+                    "    if (uUseHardwareMotion == 1) {",
+                    "        return texture2D(uMotionTexture, uv).rg;",
+                    "    }",
                     "    vec2 texel = 1.0 / resolution;",
                     "    float minDiff = 1.0;",
                     "    vec2 bestMotion = vec2(0.0);",
-                    "",
-                    "    // We check only 4 main directions (right, left, up, down)",
                     "    vec2 offsets[4];",
                     "    offsets[0] = vec2(1.0, 0.0) * texel;",
                     "    offsets[1] = vec2(-1.0, 0.0) * texel;",
                     "    offsets[2] = vec2(0.0, 1.0) * texel;",
                     "    offsets[3] = vec2(0.0, -1.0) * texel;",
-                    "",
-                    "    vec3 centerColor = texture2D(uTextureCurr, uv).rgb;",
-                    "",
+                    "    vec3 centerColor = texture2D(uTexturePrev, uv).rgb;",
                     "    for (int i = 0; i < 4; i++) {",
                     "        vec2 sampleUV = uv + offsets[i];",
-                    "        vec3 sampleColor = texture2D(uTexturePrev, sampleUV).rgb;",
+                    "        vec3 sampleColor = texture2D(uTextureHistory, sampleUV).rgb;",
                     "        float diff = distance(centerColor, sampleColor);",
-                    "",
                     "        if (diff < minDiff) {",
                     "            minDiff = diff;",
                     "            bestMotion = offsets[i];",
                     "        }",
                     "    }",
-                    "",
-                    "    // If the difference is too big, we assume that there is no movement",
-                    "    if (minDiff > 0.2) {",
-                    "        return vec2(0.0);",
-                    "    }",
-                    "",
+                    "    if (minDiff > 0.2) return vec2(0.0);",
                     "    return bestMotion;",
                     "}",
-                    "",
-                    "// Fast edge detector (brightness only)",
+
                     "float fastEdgeDetection(vec2 uv) {",
                     "    vec2 texel = 1.0 / resolution;",
-                    "",
-                    "    // We only use brightness for speed",
                     "    float center = texture2D(uTextureCurr, uv).r;",
                     "    float right = texture2D(uTextureCurr, uv + vec2(texel.x, 0.0)).r;",
                     "    float left = texture2D(uTextureCurr, uv - vec2(texel.x, 0.0)).r;",
                     "    float up = texture2D(uTextureCurr, uv + vec2(0.0, texel.y)).r;",
                     "    float down = texture2D(uTextureCurr, uv - vec2(0.0, texel.y)).r;",
-                    "",
-                    "    // Simple Sobel",
                     "    float gx = right - left;",
                     "    float gy = up - down;",
-                    "",
                     "    return sqrt(gx * gx + gy * gy);",
                     "}",
-                    "",
-                    "// The main function of frame generation",
+
                     "vec4 generateFrame(vec2 uv) {",
                     "    if (uIsEnabled != 1) {",
-                    "        return texture2D(uTextureCurr, uv);",
+                    "        return texture2D(uTexturePrev, uv);",
                     "    }",
-                    "",
-                    "    // 1. Textures",
                     "    vec4 colorPrev = texture2D(uTexturePrev, uv);",
                     "    vec4 colorCurr = texture2D(uTextureCurr, uv);",
-                    "",
-                    "    // 2. Quick motion assessment",
                     "    vec2 motion = fastMotionEstimate(uv);",
                     "    float motionLength = length(motion);",
-                    "",
-                    "    // 3. Edge detection",
                     "    float edgeStrength = fastEdgeDetection(uv);",
-                    "",
-                    "    // 4. Frame feneration",
                     "    if (motionLength > 0.001) {",
-                    "        // There is movement - adjust the UV coordinates",
                     "        float motionScale = 0.5;",
                     "        vec2 adjustedUV = uv + motion * motionScale * uBlendFactor;",
-                    "        ",
-                    "        // Checking the boundaries",
-                    "        if (adjustedUV.x < 0.0 || adjustedUV.x > 1.0 || ",
-                    "            adjustedUV.y < 0.0 || adjustedUV.y > 1.0) {",
-                    "            adjustedUV = uv;",
-                    "        }",
-                    "        ",
+                    "        adjustedUV = clamp(adjustedUV, 0.0, 1.0);",
                     "        vec4 motionAdjusted = texture2D(uTexturePrev, adjustedUV);",
                     "        return mix(motionAdjusted, colorCurr, 0.5);",
                     "    } else if (edgeStrength > 0.1) {",
-                    "        // Sharp edges - less interpolation",
                     "        return mix(colorPrev, colorCurr, uBlendFactor * 0.5);",
                     "    } else {",
-                    "        // Regular interpolation for smooth areas",
                     "        return mix(colorPrev, colorCurr, uBlendFactor);",
                     "    }",
                     "}",
-                    "",
-                    "// Simple sharpness improvement",
+
                     "vec4 applySharpen(vec4 color, vec2 uv) {",
                     "    vec2 texel = 1.0 / resolution;",
                     "    vec4 blurred = vec4(0.0);",
@@ -764,48 +1048,32 @@ public class FrameGenerationEffect extends Effect {
                     "    blurred += texture2D(uTextureCurr, uv - vec2(texel.x, 0.0)) * 0.125;",
                     "    blurred += texture2D(uTextureCurr, uv + vec2(0.0, texel.y)) * 0.125;",
                     "    blurred += texture2D(uTextureCurr, uv - vec2(0.0, texel.y)) * 0.125;",
-                    "",
-                    "    // Unsharp mask",
                     "    return color + (color - blurred) * 0.3;",
                     "}",
-                    "",
+
                     "void main() {",
                     "    vec2 uv = vUV;",
-                    "",
                     "    if (uIsEnabled == 1) {",
-                    "        // Generate frame",
                     "        vec4 generated = generateFrame(uv);",
-                    "",
-                    "        // Easy post-processing",
-                    "        float luminance = dot(generated.rgb, vec3(0.299, 0.587, 0.114));",
-                    "        ",
-                    "        // Auto-contrast",
-                    "        float contrast = 1.05;",
-                    "        generated.rgb = ((generated.rgb - 0.5) * contrast) + 0.5;",
-                    "        ",
-                    "        // Light saturation",
-                    "        generated.rgb = mix(vec3(luminance), generated.rgb, 1.05);",
-                    "        ",
-                    "        // Slight sharpening (only if there are edges)",
-                    "        float edge = fastEdgeDetection(uv);",
-                    "        if (edge > 0.05) {",
-                    "            generated = applySharpen(generated, uv);",
+                    "        if (uUsePostProc == 1) {",
+                    "            float luminance = dot(generated.rgb, vec3(0.299, 0.587, 0.114));",
+                    "            float contrast = 1.05;",
+                    "            generated.rgb = ((generated.rgb - 0.5) * contrast) + 0.5;",
+                    "            generated.rgb = mix(vec3(luminance), generated.rgb, 1.05);",
+                    "            float edge = fastEdgeDetection(uv);",
+                    "            if (edge > 0.05) {",
+                    "                generated = applySharpen(generated, uv);",
+                    "            }",
                     "        }",
-                    "        ",
                     "        gl_FragColor = clamp(generated, 0.0, 1.0);",
                     "    } else {",
-                    "        // Real frame",
                     "        vec4 prev = texture2D(uTexturePrev, uv);",
-                    "",
-                    "        // Easy post-processing",
-                    "        float luminance = dot(prev.rgb, vec3(0.299, 0.587, 0.114));",
-                    "        ",
-                    "        // Auto-contrast",
-                    "        float contrast = 1.05;",
-                    "        prev.rgb = ((prev.rgb - 0.5) * contrast) + 0.5;",
-                    "        ",
-                    "        // Light saturation",
-                    "        prev.rgb = mix(vec3(luminance), prev.rgb, 1.05);",
+                    "        if (uUsePostProc == 1) {",
+                    "            float luminance = dot(prev.rgb, vec3(0.299, 0.587, 0.114));",
+                    "            float contrast = 1.05;",
+                    "            prev.rgb = ((prev.rgb - 0.5) * contrast) + 0.5;",
+                    "            prev.rgb = mix(vec3(luminance), prev.rgb, 1.05);",
+                    "        }",
                     "        gl_FragColor = prev;",
                     "    }",
                     "}"
@@ -814,254 +1082,174 @@ public class FrameGenerationEffect extends Effect {
     }
 
     private static class QualityFrameGenerationMaterial extends ScreenMaterial {
-        public QualityFrameGenerationMaterial() {
-            super();
-        }
-
         @Override
         protected String getFragmentShader() {
             return String.join("\n", new CharSequence[]{
                     "precision mediump float;",
                     "varying vec2 vUV;",
+                    "uniform sampler2D uTextureHistory;",
                     "uniform sampler2D uTexturePrev;",
                     "uniform sampler2D uTextureCurr;",
+                    "uniform sampler2D uMotionTexture;",
                     "uniform int uIsEnabled;",
+                    "uniform int uUseHardwareMotion;",
                     "uniform float uBlendFactor;",
                     "uniform vec2 resolution;",
-                    "",
-                    "// Improved motion detector (3x3 search)",
+                    "uniform int uUsePostProc;",
+
                     "vec2 enhancedMotionEstimate(vec2 uv) {",
+                    "    if (uUseHardwareMotion == 1) {",
+                    "        return texture2D(uMotionTexture, uv).rg;",
+                    "    }",
                     "    vec2 texel = 1.0 / resolution;",
                     "    float minDiff = 1.0;",
                     "    vec2 bestMotion = vec2(0.0);",
-                    "",
-                    "    // Search within a radius of 1.5 pixels (9 directions)",
                     "    for (float dy = -1.0; dy <= 1.0; dy += 1.0) {",
                     "        for (float dx = -1.0; dx <= 1.0; dx += 1.0) {",
                     "            vec2 offset = vec2(dx, dy) * texel;",
-                    "",
-                    "            // Comparing the central pixel and 4 neighbors",
                     "            float diff = 0.0;",
-                    "            diff += distance(texture2D(uTextureCurr, uv).rgb, ",
-                    "                             texture2D(uTexturePrev, uv + offset).rgb);",
-                    "            ",
-                    "            // Adding 4 adjacent pixels for better accuracy",
-                    "            diff += distance(texture2D(uTextureCurr, uv + vec2(texel.x, 0.0)).rgb, ",
-                    "                             texture2D(uTexturePrev, uv + vec2(texel.x, 0.0) + offset).rgb) * 0.5;",
-                    "            diff += distance(texture2D(uTextureCurr, uv - vec2(texel.x, 0.0)).rgb, ",
-                    "                             texture2D(uTexturePrev, uv - vec2(texel.x, 0.0) + offset).rgb) * 0.5;",
-                    "            diff += distance(texture2D(uTextureCurr, uv + vec2(0.0, texel.y)).rgb, ",
-                    "                             texture2D(uTexturePrev, uv + vec2(0.0, texel.y) + offset).rgb) * 0.5;",
-                    "            diff += distance(texture2D(uTextureCurr, uv - vec2(0.0, texel.y)).rgb, ",
-                    "                             texture2D(uTexturePrev, uv - vec2(0.0, texel.y) + offset).rgb) * 0.5;",
-                    "",
-                    "            // Taking into account the length of the offset",
+                    "            diff += distance(texture2D(uTexturePrev, uv).rgb, texture2D(uTextureHistory, uv + offset).rgb);",
+                    "            diff += distance(texture2D(uTexturePrev, uv + vec2(texel.x, 0.0)).rgb, texture2D(uTextureHistory, uv + vec2(texel.x, 0.0) + offset).rgb) * 0.5;",
+                    "            diff += distance(texture2D(uTexturePrev, uv - vec2(texel.x, 0.0)).rgb, texture2D(uTextureHistory, uv - vec2(texel.x, 0.0) + offset).rgb) * 0.5;",
+                    "            diff += distance(texture2D(uTexturePrev, uv + vec2(0.0, texel.y)).rgb, texture2D(uTextureHistory, uv + vec2(0.0, texel.y) + offset).rgb) * 0.5;",
+                    "            diff += distance(texture2D(uTexturePrev, uv - vec2(0.0, texel.y)).rgb, texture2D(uTextureHistory, uv - vec2(0.0, texel.y) + offset).rgb) * 0.5;",
                     "            float penalty = length(offset) * 0.15;",
-                    "            diff = diff + penalty;",
-                    "",
+                    "            diff += penalty;",
                     "            if (diff < minDiff) {",
                     "                minDiff = diff;",
                     "                bestMotion = offset;",
                     "            }",
                     "        }",
                     "    }",
-                    "",
-                    "    // Noise filtering",
-                    "    if (minDiff > 0.3) {",
-                    "        return vec2(0.0);",
-                    "    }",
-                    "",
+                    "    if (minDiff > 0.3) return vec2(0.0);",
                     "    return bestMotion;",
                     "}",
-                    "",
-                    "// Improved Edge Detector (simplified Sobel)",
+
                     "float enhancedEdgeDetection(vec2 uv) {",
                     "    vec2 texel = 1.0 / resolution;",
-                    "",
-                    "    // Simple Sobel 3x3 (only 4 neighbors for speed)",
                     "    float center = texture2D(uTextureCurr, uv).r;",
                     "    float right = texture2D(uTextureCurr, uv + vec2(texel.x, 0.0)).r;",
                     "    float left = texture2D(uTextureCurr, uv - vec2(texel.x, 0.0)).r;",
                     "    float up = texture2D(uTextureCurr, uv + vec2(0.0, texel.y)).r;",
                     "    float down = texture2D(uTextureCurr, uv - vec2(0.0, texel.y)).r;",
-                    "",
                     "    float gx = (right - left) * 2.0;",
                     "    float gy = (up - down) * 2.0;",
-                    "",
                     "    float edge = sqrt(gx * gx + gy * gy);",
                     "    return clamp(edge * 2.0, 0.0, 1.0);",
                     "}",
-                    "",
-                    "// Quick texture assessment (local variation)",
+
                     "float fastTextureDetection(vec2 uv) {",
                     "    vec2 texel = 1.0 / resolution;",
-                    "",
-                    "    // We take 4 neighboring pixels",
                     "    vec3 c1 = texture2D(uTextureCurr, uv + vec2(texel.x, 0.0)).rgb;",
                     "    vec3 c2 = texture2D(uTextureCurr, uv - vec2(texel.x, 0.0)).rgb;",
                     "    vec3 c3 = texture2D(uTextureCurr, uv + vec2(0.0, texel.y)).rgb;",
                     "    vec3 c4 = texture2D(uTextureCurr, uv - vec2(0.0, texel.y)).rgb;",
-                    "",
-                    "    // Evaluating the variation",
                     "    float variation = 0.0;",
                     "    variation += distance(c1, c2);",
                     "    variation += distance(c3, c4);",
-                    "",
                     "    return clamp(variation * 2.0, 0.0, 1.0);",
                     "}",
-                    "",
-                    "// Adaptive mixing",
+
                     "vec4 adaptiveBlending(vec2 uv, vec2 motion) {",
                     "    vec4 prev = texture2D(uTexturePrev, uv);",
                     "    vec4 curr = texture2D(uTextureCurr, uv);",
-                    "",
                     "    float motionLength = length(motion);",
                     "    float edgeStrength = enhancedEdgeDetection(uv);",
-                    "",
-                    "    // For moving objects",
                     "    if (motionLength > 0.001) {",
                     "        vec2 motionDir = normalize(motion);",
                     "        float motionScale = 0.5;",
-                    "",
-                    "        // Adjusting the UV to reflect the movement",
                     "        vec2 adjustedUV = uv + motionDir * motionScale * uBlendFactor;",
-                    "",
-                    "        // Checking boundaries",
-                    "        if (adjustedUV.x < 0.0 || adjustedUV.x > 1.0 || ",
-                    "            adjustedUV.y < 0.0 || adjustedUV.y > 1.0) {",
-                    "            adjustedUV = uv;",
-                    "        }",
-                    "",
+                    "        adjustedUV = clamp(adjustedUV, 0.0, 1.0);",
                     "        vec4 motionAdjusted = texture2D(uTexturePrev, adjustedUV);",
-                    "",
-                    "        // Adaptive blend factor for edges",
                     "        float adaptiveBlend = uBlendFactor;",
                     "        if (edgeStrength > 0.2) {",
                     "            adaptiveBlend = mix(uBlendFactor, 0.5, edgeStrength);",
                     "        }",
-                    "",
                     "        return mix(motionAdjusted, curr, adaptiveBlend);",
                     "    }",
-                    "",
-                    "    // For static scenes",
                     "    float textureDetail = fastTextureDetection(uv);",
-                    "",
                     "    if (textureDetail < 0.1) {",
-                    "        // Homogeneous areas - smooth interpolation",
                     "        return mix(prev, curr, uBlendFactor);",
                     "    } else {",
-                    "        // Texture areas - improved interpolation",
-                    "        // Add some neighboring pixels for smoothing",
                     "        vec2 texel = 1.0 / resolution;",
                     "        vec4 result = mix(prev, curr, uBlendFactor) * 0.5;",
                     "        result += texture2D(uTexturePrev, uv + vec2(texel.x * 0.5, 0.0)) * 0.125;",
                     "        result += texture2D(uTexturePrev, uv - vec2(texel.x * 0.5, 0.0)) * 0.125;",
                     "        result += texture2D(uTextureCurr, uv + vec2(0.0, texel.y * 0.5)) * 0.125;",
                     "        result += texture2D(uTextureCurr, uv - vec2(0.0, texel.y * 0.5)) * 0.125;",
-                    "",
                     "        return result;",
                     "    }",
                     "}",
-                    "",
-                    "// Improved sharpness filter (fast unsharp mask)",
+
                     "vec4 fastSharpen(vec4 color, vec2 uv) {",
                     "    vec2 texel = 1.0 / resolution;",
-                    "",
-                    "    // Simple blur (cross)",
                     "    vec4 blurred = color * 0.4;",
                     "    blurred += texture2D(uTextureCurr, uv + vec2(texel.x, 0.0)) * 0.15;",
                     "    blurred += texture2D(uTextureCurr, uv - vec2(texel.x, 0.0)) * 0.15;",
                     "    blurred += texture2D(uTextureCurr, uv + vec2(0.0, texel.y)) * 0.15;",
                     "    blurred += texture2D(uTextureCurr, uv - vec2(0.0, texel.y)) * 0.15;",
-                    "",
-                    "    // Unsharp mask",
                     "    float amount = 0.4;",
                     "    vec4 sharpened = color + (color - blurred) * amount;",
-                    "",
                     "    return clamp(sharpened, 0.0, 1.0);",
                     "}",
-                    "",
-                    "// Improved color correction",
+
                     "vec4 enhancedColorCorrection(vec4 color) {",
-                    "    // Automatic contrast",
                     "    float luminance = dot(color.rgb, vec3(0.299, 0.587, 0.114));",
-                    "",
-                    "    // Adaptive contrast",
                     "    float adaptiveContrast = 1.08;",
                     "    if (luminance > 0.8) adaptiveContrast = 1.04;",
                     "    if (luminance < 0.2) adaptiveContrast = 1.12;",
-                    "",
                     "    color.rgb = ((color.rgb - 0.5) * adaptiveContrast) + 0.5;",
-                    "",
-                    "    // Light saturation",
                     "    float saturation = 1.06;",
                     "    vec3 gray = vec3(luminance);",
                     "    color.rgb = mix(gray, color.rgb, saturation);",
-                    "",
-                    "    // Light gamma correction",
                     "    color.rgb = pow(color.rgb, vec3(0.98));",
-                    "",
                     "    return color;",
                     "}",
-                    "",
-                    "// Main function",
+
                     "void main() {",
+                    "    vec2 uv = vUV;",
                     "    if (uIsEnabled != 1) {",
-                    "        vec4 prev = texture2D(uTexturePrev, vUV);",
-                    "        // 3. Post-processing",
-                    "        prev = enhancedColorCorrection(prev);",
-                    "",
-                    "        // 4. Conditional sharpening",
-                    "        float edgeStrength = enhancedEdgeDetection(vUV);",
-                    "        if (edgeStrength > 0.15) {",
-                    "            prev = fastSharpen(prev, vUV);",
+                    "        vec4 prev = texture2D(uTexturePrev, uv);",
+                    "        if (uUsePostProc == 1) {",
+                    "            prev = enhancedColorCorrection(prev);",
+                    "            float edgeStrength = enhancedEdgeDetection(uv);",
+                    "            if (edgeStrength > 0.15) {",
+                    "                prev = fastSharpen(prev, uv);",
+                    "            }",
+                    "            float textureDetail = fastTextureDetection(uv);",
+                    "            if (textureDetail < 0.08) {",
+                    "                vec2 texel = 1.0 / resolution;",
+                    "                prev = prev * 0.6;",
+                    "                prev += texture2D(uTexturePrev, uv + vec2(texel.x, 0.0)) * 0.1;",
+                    "                prev += texture2D(uTexturePrev, uv - vec2(texel.x, 0.0)) * 0.1;",
+                    "                prev += texture2D(uTexturePrev, uv + vec2(0.0, texel.y)) * 0.1;",
+                    "                prev += texture2D(uTexturePrev, uv - vec2(0.0, texel.y)) * 0.1;",
+                    "            }",
                     "        }",
-                    "",
-                    "        // 5. Light noise reduction for homogeneous areas",
-                    "        float textureDetail = fastTextureDetection(vUV);",
-                    "        if (textureDetail < 0.08) {",
-                    "            vec2 texel = 1.0 / resolution;",
-                    "            prev = prev * 0.6;",
-                    "            prev += texture2D(uTexturePrev, vUV + vec2(texel.x, 0.0)) * 0.1;",
-                    "            prev += texture2D(uTexturePrev, vUV - vec2(texel.x, 0.0)) * 0.1;",
-                    "            prev += texture2D(uTexturePrev, vUV + vec2(0.0, texel.y)) * 0.1;",
-                    "            prev += texture2D(uTexturePrev, vUV - vec2(0.0, texel.y)) * 0.1;",
-                    "        }",
-                    "",
                     "        gl_FragColor = clamp(prev, 0.0, 1.0);",
                     "        return;",
                     "    }",
-                    "",
-                    "    // 1. Motion assessment",
-                    "    vec2 motion = enhancedMotionEstimate(vUV);",
-                    "",
-                    "    // 2. Adaptive mixing",
-                    "    vec4 generated = adaptiveBlending(vUV, motion);",
-                    "",
-                    "    // 3. Post-processing",
-                    "    generated = enhancedColorCorrection(generated);",
-                    "",
-                    "    // 4. Conditional sharpening",
-                    "    float edgeStrength = enhancedEdgeDetection(vUV);",
-                    "    if (edgeStrength > 0.15) {",
-                    "        generated = fastSharpen(generated, vUV);",
-                    "    }",
-                    "",
-                    "    // 5. Light noise reduction for homogeneous areas",
-                    "    float textureDetail = fastTextureDetection(vUV);",
-                    "    if (textureDetail < 0.08) {",
+                    "    vec2 motion = enhancedMotionEstimate(uv);",
+                    "    vec4 generated = adaptiveBlending(uv, motion);",
+                    "    if (uUsePostProc == 1) {",
+                    "        generated = enhancedColorCorrection(generated);",
+                    "        float edgeStrength = enhancedEdgeDetection(uv);",
+                    "        if (edgeStrength > 0.15) {",
+                    "            generated = fastSharpen(generated, uv);",
+                    "        }",
+                    "        float textureDetail = fastTextureDetection(uv);",
+                    "        if (textureDetail < 0.08) {",
                     "        vec2 texel = 1.0 / resolution;",
-                    "        generated = generated * 0.6;",
-                    "        generated += texture2D(uTextureCurr, vUV + vec2(texel.x, 0.0)) * 0.1;",
-                    "        generated += texture2D(uTextureCurr, vUV - vec2(texel.x, 0.0)) * 0.1;",
-                    "        generated += texture2D(uTextureCurr, vUV + vec2(0.0, texel.y)) * 0.1;",
-                    "        generated += texture2D(uTextureCurr, vUV - vec2(0.0, texel.y)) * 0.1;",
+                    "            generated = generated * 0.6;",
+                    "            generated += texture2D(uTextureCurr, uv + vec2(texel.x, 0.0)) * 0.1;",
+                    "            generated += texture2D(uTextureCurr, uv - vec2(texel.x, 0.0)) * 0.1;",
+                    "            generated += texture2D(uTextureCurr, uv + vec2(0.0, texel.y)) * 0.1;",
+                    "            generated += texture2D(uTextureCurr, uv - vec2(0.0, texel.y)) * 0.1;",
+                    "        }",
                     "    }",
-                    "",
                     "    gl_FragColor = clamp(generated, 0.0, 1.0);",
                     "}"
             });
         }
     }
-
 }

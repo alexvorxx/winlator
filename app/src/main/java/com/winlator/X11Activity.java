@@ -1026,7 +1026,7 @@ public class X11Activity extends AppCompatActivity implements View.OnApplyWindow
         rootView.addView(inputControlsView);
 
         if (container != null && container.isShowFPS()) {
-            frameRating = new FrameRating(this);
+            frameRating = new FrameRating(this, null);
             frameRating.setShowOtherCounters(container.isShowOtherCounters());
             frameRating.setVisibility(View.GONE);
             rootView.addView(frameRating);

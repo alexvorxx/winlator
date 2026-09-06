@@ -6,6 +6,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.BatteryManager;
+import android.os.Handler;
 import android.os.SystemClock;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
@@ -14,6 +15,8 @@ import android.widget.FrameLayout;
 import android.widget.TextView;
 
 import com.winlator.R;
+import com.winlator.renderer.EffectComposer;
+import com.winlator.renderer.GLRenderer;
 
 import java.util.Locale;
 
@@ -21,6 +24,9 @@ public class FrameRating extends FrameLayout implements Runnable {
     private long lastTime = 0;
     private int frameCount = 0;
     private float lastFPS = 0;
+    private float realFPS = 0;
+    private float targetFPS = 0;
+    private int fpsMultiplier = 2;
     private final TextView textViewFPS;
     private final TextView textViewRAM;
     private final TextView textViewBatteryTemp;
@@ -30,16 +36,18 @@ public class FrameRating extends FrameLayout implements Runnable {
     private ActivityManager.MemoryInfo memoryInfo;
     private BroadcastReceiver batteryReceiver;
     private int batteryTemperature;
+    private final GLRenderer renderer;
+    private boolean frameGenerationEnabled = false;
 
-    public FrameRating(Context context) {
-        this(context, null);
+    public FrameRating(Context context, GLRenderer renderer) {
+        this(context, renderer, null);
     }
 
-    public FrameRating(Context context, AttributeSet attrs) {
-        this(context, attrs, 0);
+    public FrameRating(Context context, GLRenderer renderer, AttributeSet attrs) {
+        this(context, renderer, attrs, 0);
     }
 
-    public FrameRating(Context context, AttributeSet attrs, int defStyleAttr) {
+    public FrameRating(Context context, GLRenderer renderer, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
 
         View view = LayoutInflater.from(context).inflate(R.layout.frame_rating, this, false);
@@ -52,6 +60,8 @@ public class FrameRating extends FrameLayout implements Runnable {
 
         activityManager = (ActivityManager)context.getSystemService(Context.ACTIVITY_SERVICE);
         memoryInfo = new ActivityManager.MemoryInfo();
+
+        this.renderer = renderer;
 
         batteryReceiver = new BroadcastReceiver() {
             @Override
@@ -85,7 +95,12 @@ public class FrameRating extends FrameLayout implements Runnable {
     @Override
     public void run() {
         if (getVisibility() == GONE) setVisibility(View.VISIBLE);
-        textViewFPS.setText(String.format(Locale.ENGLISH, "%.1f", lastFPS));
+
+        updateFPSMultiplier();
+        if (frameGenerationEnabled)
+            textViewFPS.setText(String.format(Locale.ENGLISH, "%.1f → %.1f", lastFPS, lastFPS * fpsMultiplier));
+        else
+            textViewFPS.setText(String.format(Locale.ENGLISH, "%.1f", lastFPS));
 
         activityManager.getMemoryInfo(memoryInfo);
         long usedMem = memoryInfo.totalMem - memoryInfo.availMem;
@@ -114,6 +129,20 @@ public class FrameRating extends FrameLayout implements Runnable {
             textViewBatteryTempName.setVisibility(GONE);
             textViewRAM.setVisibility(GONE);
             textViewBatteryTemp.setVisibility(GONE);
+        }
+    }
+
+    private void updateFPSMultiplier() {
+        if (renderer != null && renderer.effectComposer != null) {
+            EffectComposer.FrameGenerationSettings settings =
+                    renderer.effectComposer.getFrameGenerationSettings();
+
+            if (settings != null) {
+                frameGenerationEnabled = true;
+                fpsMultiplier = settings.fpsMultiplier;
+            } else {
+                frameGenerationEnabled = false;
+            }
         }
     }
 

@@ -519,6 +519,7 @@
     <string name="initial_fps">Нач. FPS:</string>
     <string name="generation_mode">Режим:</string>
     <string name="fps_multiplier">Множитель:</string>
+    <string name="post_processing" translatable="false">Пост-обработка:</string>
 
     <string name="install_drivers">Установить драйвер</string>
     <string name="install_drivers_message">Сейчас Вам будет предложено выбрать драйвер. Он должен быть таким же, как и в других эмуляторах (Yuzu, Dolphin, Citra, и т.д.).</string>

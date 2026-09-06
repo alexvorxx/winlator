@@ -3,7 +3,6 @@ package com.winlator.widget;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.PointF;
-import android.os.Handler;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -12,6 +11,7 @@ import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -24,7 +24,6 @@ import com.winlator.R;
 import com.winlator.core.Callback;
 import com.winlator.core.UnitUtils;
 import com.winlator.math.Mathf;
-import com.winlator.renderer.EffectComposer;
 import com.winlator.renderer.GLRenderer;
 import com.winlator.renderer.effects.FrameGenerationEffect;
 
@@ -38,21 +37,24 @@ public class FrameGenerationView extends FrameLayout {
     private final GLRenderer renderer;
 
     // Добавляем элементы UI
-    private final Spinner modeSpinner;
+    private final Spinner generationModeSpinner;
     private final Spinner fpsMultiplierSpinner;
     private final Spinner fpsSpinner;
-    private final TextView currentFpsTextView;
-    private final SeekBar blendFactorSeekBar;
-    private final TextView blendFactorLabel;
+    private final LinearLayout LLSettings;
+    private final Spinner apiModeSpinner;
+    private final Spinner blendModeSpinner;
+    private final SeekBar blendScaleSeekBar;
+    private final TextView blendScaleLabel;
+    private final ToggleButton toggleButtonPP;
 
     private static final String[] GENERATION_MODE_OPTIONS = {
             "Fast", "Balanced", "Quality"
     };
 
     private static final int[] GENERATION_MODE_VALUES = {
-            FrameGenerationEffect.MODE_FAST,
-            FrameGenerationEffect.MODE_BALANCED,
-            FrameGenerationEffect.MODE_QUALITY
+            FrameGenerationEffect.GENERATION_MODE_FAST,
+            FrameGenerationEffect.GENERATION_MODE_BALANCED,
+            FrameGenerationEffect.GENERATION_MODE_QUALITY
     };
 
     private static final String[] FPS_MULTIPLIER_OPTIONS = {
@@ -79,10 +81,28 @@ public class FrameGenerationView extends FrameLayout {
             FrameGenerationEffect.FPS_60
     };
 
+    private static final String[] BLEND_MODE_OPTIONS = {
+            "Auto", "Scale"
+    };
+
+    private static final int[] API_MODE_VALUES = {
+            FrameGenerationEffect.API_GLES20,
+            FrameGenerationEffect.API_QUALCOMM
+    };
+
+    private static final String[] API_MODE_OPTIONS = {
+            "GLES 2.0", "Qualcomm"
+    };
+
     private int initialFPS;
     private int generationMode;
     private int fpsMultiplier;
-    private float blendFactor;
+    private float blendScale;
+    private int apiMode;
+    private boolean blendModeAuto;
+    private boolean usePostProcessing;
+
+    private boolean settingsOpened = false;
 
     public FrameGenerationView(Context context, GLRenderer renderer) {
         this(context, null, renderer);
@@ -138,12 +158,26 @@ public class FrameGenerationView extends FrameLayout {
         });
 
         fpsSpinner = contentView.findViewById(R.id.fps_spinner);
-        modeSpinner = contentView.findViewById(R.id.generation_mode_spinner);
+        generationModeSpinner = contentView.findViewById(R.id.generation_mode_spinner);
         fpsMultiplierSpinner = contentView.findViewById(R.id.fps_multiplier_spinner);
-        currentFpsTextView = contentView.findViewById(R.id.current_fps_text);
+        LLSettings = contentView.findViewById(R.id.LLSettings);
+        apiModeSpinner = contentView.findViewById(R.id.api_mode_spinner);
+        blendModeSpinner = contentView.findViewById(R.id.blend_mode_spinner);
 
-        blendFactorSeekBar = contentView.findViewById(R.id.SBBlendFactor);
-        blendFactorLabel = contentView.findViewById(R.id.TVBlendFactorLabel);
+        blendScaleSeekBar = contentView.findViewById(R.id.SBBlendScale);
+        blendScaleLabel = contentView.findViewById(R.id.TVBlendScaleLabel);
+
+        toggleButtonPP = contentView.findViewById(R.id.ToggleButtonPP);
+
+        contentView.findViewById(R.id.BTSettings).setOnClickListener((v) -> {
+            if (!settingsOpened) {
+                settingsOpened = true;
+                LLSettings.setVisibility(View.VISIBLE);
+            } else {
+                settingsOpened = false;
+                LLSettings.setVisibility(View.GONE);
+            }
+        });
 
         ArrayAdapter<String> adapter = new ArrayAdapter<>(
                 getContext(),
@@ -159,7 +193,7 @@ public class FrameGenerationView extends FrameLayout {
                 GENERATION_MODE_OPTIONS
         );
         adapter2.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        modeSpinner.setAdapter(adapter2);
+        generationModeSpinner.setAdapter(adapter2);
 
 
         ArrayAdapter<String> adapter3 = new ArrayAdapter<>(
@@ -169,6 +203,22 @@ public class FrameGenerationView extends FrameLayout {
         );
         adapter3.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         fpsMultiplierSpinner.setAdapter(adapter3);
+
+        ArrayAdapter<String> adapter4 = new ArrayAdapter<>(
+                getContext(),
+                android.R.layout.simple_spinner_item,
+                BLEND_MODE_OPTIONS
+        );
+        adapter4.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        blendModeSpinner.setAdapter(adapter4);
+
+        ArrayAdapter<String> adapter5 = new ArrayAdapter<>(
+                getContext(),
+                android.R.layout.simple_spinner_item,
+                API_MODE_OPTIONS
+        );
+        adapter5.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        apiModeSpinner.setAdapter(adapter5);
 
         loadSettings();
 
@@ -181,6 +231,16 @@ public class FrameGenerationView extends FrameLayout {
                     renderer.effectComposer.configureFrameGeneration(this.initialFPS, this.generationMode);
                 }
             }
+        });
+
+        toggleButtonPP.setVisibility(VISIBLE);
+        toggleButtonPP.setOnClickListener((v) -> {
+            usePostProcessing = toggleButtonPP.isChecked();
+            if (renderer != null && renderer.effectComposer != null) {
+                setUsePostProcessing(usePostProcessing);
+            }
+            SharedPreferences prefs = getContext().getSharedPreferences("frame_generation", Context.MODE_PRIVATE);
+            prefs.edit().putBoolean("use_post_processing", usePostProcessing).apply();
         });
 
         fpsSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
@@ -199,13 +259,14 @@ public class FrameGenerationView extends FrameLayout {
             public void onNothingSelected(AdapterView<?> parent) {}
         });
 
-        modeSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+        generationModeSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 generationMode = GENERATION_MODE_VALUES[position];
 
                 if (renderer != null && renderer.effectComposer != null) {
-                    renderer.effectComposer.setFrameGenerationVariables(generationMode, fpsMultiplier, blendFactor);
+                    renderer.effectComposer.setFrameGenerationVariables(generationMode, fpsMultiplier,
+                            apiMode, usePostProcessing, blendModeAuto, blendScale);
                 }
 
                 SharedPreferences prefs = getContext().getSharedPreferences("frame_generation", Context.MODE_PRIVATE);
@@ -222,17 +283,9 @@ public class FrameGenerationView extends FrameLayout {
                 fpsMultiplier = FPS_MULTIPLIER_VALUES[position];
 
                 if (renderer != null && renderer.effectComposer != null) {
-                    renderer.effectComposer.setFrameGenerationVariables(generationMode, fpsMultiplier, blendFactor);
+                    renderer.effectComposer.setFrameGenerationVariables(generationMode, fpsMultiplier,
+                            apiMode, usePostProcessing, blendModeAuto, blendScale);
                     setFpsMultiplier(fpsMultiplier);
-                }
-
-                if (fpsMultiplier == FrameGenerationEffect.FPS_MULTIPLIER_X2) {
-                    blendFactorSeekBar.setVisibility(View.VISIBLE);
-                    blendFactorLabel.setText(String.format("Blend Factor: %.2f", blendFactor));
-                }
-                else {
-                    blendFactorSeekBar.setVisibility(View.GONE);
-                    blendFactorLabel.setText("Blend Factor: Auto");
                 }
 
                 SharedPreferences prefs = getContext().getSharedPreferences("frame_generation", Context.MODE_PRIVATE);
@@ -243,24 +296,68 @@ public class FrameGenerationView extends FrameLayout {
             public void onNothingSelected(AdapterView<?> parent) {}
         });
 
-        blendFactorSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+        blendModeSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                if (position == 0) {
+                    blendModeAuto = true;
+                    blendScaleSeekBar.setVisibility(View.GONE);
+                    blendScaleLabel.setText("Blend:");
+                } else {
+                    blendModeAuto = false;
+                    blendScaleSeekBar.setVisibility(View.VISIBLE);
+                    blendScaleLabel.setText(String.format("Blend: %.2f", blendScale));
+                }
+
+                if (renderer != null && renderer.effectComposer != null) {
+                    renderer.effectComposer.setFrameGenerationVariables(generationMode, fpsMultiplier,
+                            apiMode, usePostProcessing, blendModeAuto, blendScale);
+                    setBlendMode(blendModeAuto);
+                }
+
+                SharedPreferences prefs = getContext().getSharedPreferences("frame_generation", Context.MODE_PRIVATE);
+                prefs.edit().putBoolean("blend_mode_auto", blendModeAuto).apply();
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {}
+        });
+
+        apiModeSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                apiMode = API_MODE_VALUES[position];
+
+                if (renderer != null && renderer.effectComposer != null) {
+                    renderer.effectComposer.setFrameGenerationVariables(generationMode, fpsMultiplier,
+                            apiMode, usePostProcessing, blendModeAuto, blendScale);
+                    setApiMode(apiMode);
+                }
+
+                SharedPreferences prefs = getContext().getSharedPreferences("frame_generation", Context.MODE_PRIVATE);
+                prefs.edit().putInt("api_mode", apiMode).apply();
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {}
+        });
+
+        blendScaleSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 if (fromUser) {
-                    blendFactor = progress / 100.0f;
+                    blendScale = progress / 50.0f;
 
-                    setBlendFactor(blendFactor);
-                    blendFactorLabel.setText(String.format("Blend Factor: %.2f", blendFactor));
+                    setBlendScale(blendScale);
+                    blendScaleLabel.setText(String.format("Blend: %.2f", blendScale));
 
                     SharedPreferences prefs = getContext().getSharedPreferences("frame_generation", Context.MODE_PRIVATE);
-                    prefs.edit().putFloat("blend_factor", blendFactor).apply();
+                    prefs.edit().putFloat("blend_scale", blendScale).apply();
                 }
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
         });
-
-        startFPSUpdateTimer();
 
         addView(contentView);
     }
@@ -269,64 +366,47 @@ public class FrameGenerationView extends FrameLayout {
         if (renderer != null && renderer.effectComposer != null) {
             renderer.effectComposer.configureFrameGeneration(initialFPS, generationMode);
 
-            if (autoDetect) {
-                updateCurrentFPSDisplay();
-            }
         }
-    }
-
-    private void updateCurrentFPSDisplay() {
-        if (renderer != null && renderer.effectComposer != null) {
-            EffectComposer.FrameGenerationSettings settings =
-                    renderer.effectComposer.getFrameGenerationSettings();
-
-            if (settings != null) {
-                int realFPS = (int)(1000 / settings.realInterval);
-                int targetFPS = (int)(1000 / settings.targetInterval);
-
-                String text = String.format("Current: %d FPS → %d FPS", realFPS, targetFPS);
-                currentFpsTextView.setText(text);
-            }
-        }
-    }
-
-    private void startFPSUpdateTimer() {
-        Handler handler = new Handler();
-        Runnable updateTask = new Runnable() {
-            @Override
-            public void run() {
-                updateCurrentFPSDisplay();
-                handler.postDelayed(this, 1000);
-            }
-        };
-        handler.postDelayed(updateTask, 1000);
     }
 
     private void loadSettings() {
         SharedPreferences prefs = getContext().getSharedPreferences("frame_generation", Context.MODE_PRIVATE);
         initialFPS = prefs.getInt("fps", FrameGenerationEffect.FPS_30);
         int fps_spinner_position = prefs.getInt("fps_spinner_position", 4);
-        generationMode = prefs.getInt("mode_spinner_position", FrameGenerationEffect.MODE_BALANCED);
+        generationMode = prefs.getInt("mode_spinner_position", FrameGenerationEffect.GENERATION_MODE_BALANCED);
         fpsMultiplier = prefs.getInt("fps_multiplier", FrameGenerationEffect.FPS_MULTIPLIER_X2);
-        blendFactor = prefs.getFloat("blend_factor", FrameGenerationEffect.DEFAULT_BLEND_FACTOR);
+        apiMode = prefs.getInt("api_mode", FrameGenerationEffect.API_QUALCOMM);
+        usePostProcessing = prefs.getBoolean("use_post_processing", false);
+        blendModeAuto = prefs.getBoolean("blend_mode_auto", false);
+        blendScale = prefs.getFloat("blend_scale", FrameGenerationEffect.DEFAULT_BLEND_SCALE);
 
-        int progress = Math.round(blendFactor * 100);
-        setBlendFactor(blendFactor);
+        int progress = Math.round(blendScale * 50);
+        setBlendScale(blendScale);
         setFpsMultiplier(fpsMultiplier);
+        setBlendMode(blendModeAuto);
+        setApiMode(apiMode);
 
         fpsSpinner.setSelection(fps_spinner_position);
-        modeSpinner.setSelection(generationMode);
+        generationModeSpinner.setSelection(generationMode);
+        apiModeSpinner.setSelection(apiMode);
         fpsMultiplierSpinner.setSelection(fpsMultiplier - FrameGenerationEffect.FPS_MULTIPLIER_X2);
-        blendFactorSeekBar.setProgress(progress);
 
-        if (fpsMultiplier == FrameGenerationEffect.FPS_MULTIPLIER_X2) {
-            blendFactorSeekBar.setVisibility(View.VISIBLE);
-            blendFactorLabel.setText(String.format("Blend Factor: %.2f", blendFactor));
+        if (blendModeAuto)
+            blendModeSpinner.setSelection(0);
+        else
+            blendModeSpinner.setSelection(1);
+
+        blendScaleSeekBar.setProgress(progress);
+
+        if (blendModeAuto) {
+            blendScaleSeekBar.setVisibility(View.GONE);
+            blendScaleLabel.setText("Blend:");
+        } else {
+            blendScaleSeekBar.setVisibility(View.VISIBLE);
+            blendScaleLabel.setText(String.format("Blend: %.2f", blendScale));
         }
-        else {
-            blendFactorSeekBar.setVisibility(View.GONE);
-            blendFactorLabel.setText("Blend Factor: Auto");
-        }
+
+        toggleButtonPP.setChecked(usePostProcessing);
     }
 
     private void setFpsMultiplier(int fpsMultiplier) {
@@ -339,15 +419,46 @@ public class FrameGenerationView extends FrameLayout {
         }
     }
 
-    private void setBlendFactor(float blendFactor) {
+    private void setApiMode(int apiMode) {
         if (renderer != null && renderer.effectComposer != null) {
             FrameGenerationEffect effect =
                     (FrameGenerationEffect) renderer.effectComposer.getEffect(FrameGenerationEffect.class);
             if (effect != null) {
-                effect.setBlendFactor(blendFactor);
+                effect.setApiMode(apiMode);
             }
         }
     }
+
+    private void setUsePostProcessing(boolean usePostProcessing) {
+        if (renderer != null && renderer.effectComposer != null) {
+            FrameGenerationEffect effect =
+                    (FrameGenerationEffect) renderer.effectComposer.getEffect(FrameGenerationEffect.class);
+            if (effect != null) {
+                effect.setUsePostProcessing(usePostProcessing);
+            }
+        }
+    }
+
+    private void setBlendScale(float blendScale) {
+        if (renderer != null && renderer.effectComposer != null) {
+            FrameGenerationEffect effect =
+                    (FrameGenerationEffect) renderer.effectComposer.getEffect(FrameGenerationEffect.class);
+            if (effect != null) {
+                effect.setBlendScale(blendScale);
+            }
+        }
+    }
+
+    private void setBlendMode(boolean blendModeAuto) {
+        if (renderer != null && renderer.effectComposer != null) {
+            FrameGenerationEffect effect =
+                    (FrameGenerationEffect) renderer.effectComposer.getEffect(FrameGenerationEffect.class);
+            if (effect != null) {
+                effect.setBlendMode(blendModeAuto);
+            }
+        }
+    }
+
 
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {

@@ -802,7 +802,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         rootView.addView(inputControlsView);
 
         if (container != null && container.isShowFPS()) {
-            frameRating = new FrameRating(this);
+            frameRating = new FrameRating(this, renderer);
             frameRating.setShowOtherCounters(container.isShowOtherCounters());
             frameRating.setVisibility(View.GONE);
             rootView.addView(frameRating);

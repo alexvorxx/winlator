@@ -141,7 +141,7 @@ public class EffectComposer {
 
                 if (effect == frameGenerationEffect && frameGenerationEffect != null) {
                     // FrameGenerationEffect only
-                    GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, targetFramebuffer);
+                    GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, readBuffer.getFramebuffer());
                     GLES20.glViewport(0, 0, renderer.surfaceWidth, renderer.surfaceHeight);
                     renderer.setViewportNeedsUpdate(true);
 
@@ -152,6 +152,10 @@ public class EffectComposer {
                             renderer.surfaceHeight,
                             currentSequence
                     );
+
+                    GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, targetFramebuffer);
+                    GLES20.glViewport(0, 0, renderer.surfaceWidth, renderer.surfaceHeight);
+                    renderer.setViewportNeedsUpdate(true);
 
                     effect.getMaterial().use();
 
@@ -244,7 +248,8 @@ public class EffectComposer {
         }
     }
 
-    public void setFrameGenerationVariables(int generationMode, int fpsMultiplier, float blendFactor) {
+    public void setFrameGenerationVariables(int generationMode, int fpsMultiplier, int apiMode,
+                                            boolean usePostProcessing, boolean blendModeAuto, float blendScale) {
         if (frameGenerationEffect != null) {
             if (frameGenerationEffect.isEnabled()) {
                 Log.d(TAG, "FrameGenerationEffect restart");
@@ -257,7 +262,8 @@ public class EffectComposer {
                 frameGenerationEffect.toggleGeneration();
                 removeEffect(frameGenerationEffect);
 
-                frameGenerationEffect = new FrameGenerationEffect(generationMode, fpsMultiplier, blendFactor);
+                frameGenerationEffect = new FrameGenerationEffect(generationMode, fpsMultiplier, apiMode,
+                        usePostProcessing, blendModeAuto, blendScale);
                 addEffect(frameGenerationEffect);
                 frameGenerationEffect.toggleGeneration();
                 frameGenerationEffect.setInitialFPS(initialFPS);
@@ -287,7 +293,8 @@ public class EffectComposer {
                     frameGenerationEffect.getInitialFPS(),
                     frameGenerationEffect.isAutoDetectFPS(),
                     frameGenerationEffect.getCurrentRealFrameInterval(),
-                    frameGenerationEffect.getCurrentTargetFrameInterval()
+                    frameGenerationEffect.getCurrentTargetFrameInterval(),
+                    frameGenerationEffect.getFpsMultiplier()
             );
         }
         return null;
@@ -298,13 +305,15 @@ public class EffectComposer {
         public final boolean autoDetect;
         public final long realInterval;
         public final long targetInterval;
+        public final int fpsMultiplier;
 
-        public FrameGenerationSettings(int initialFPS, boolean autoDetect,
-                                       long realInterval, long targetInterval) {
+        public FrameGenerationSettings(int initialFPS, boolean autoDetect, long realInterval,
+                                       long targetInterval, int fpsMultiplier) {
             this.initialFPS = initialFPS;
             this.autoDetect = autoDetect;
             this.realInterval = realInterval;
             this.targetInterval = targetInterval;
+            this.fpsMultiplier = fpsMultiplier;
         }
     }
 }

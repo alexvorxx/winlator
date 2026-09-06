@@ -31,7 +31,9 @@ add_library(winlator SHARED
             winlator/xinput_stream.c
             winlator/xoutput_stream.c
             winlator/alsa_client.c
-            winlator/patchelf_wrapper.cpp)
+            winlator/patchelf_wrapper.cpp
+            winlator/qcom.cpp
+            )
 
 target_link_libraries(winlator
                       log

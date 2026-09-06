@@ -380,11 +380,14 @@ public class ScreenEffectDialog extends ContentDialog {
                 Log.d(TAG, "FrameGenerationEffect is null, creating and adding new instance.");
 
                 SharedPreferences prefs = getContext().getSharedPreferences("frame_generation", Context.MODE_PRIVATE);
-                int generationMode = prefs.getInt("mode_spinner_position", FrameGenerationEffect.MODE_BALANCED);
+                int generationMode = prefs.getInt("mode_spinner_position", FrameGenerationEffect.GENERATION_MODE_BALANCED);
                 int fpsMultiplier = prefs.getInt("fps_multiplier", FrameGenerationEffect.FPS_MULTIPLIER_X2);
-                float blendFactor = prefs.getFloat("blend_factor", FrameGenerationEffect.DEFAULT_BLEND_FACTOR);
+                int apiMode = prefs.getInt("api_mode", FrameGenerationEffect.API_QUALCOMM);
+                boolean usePostProcessing = prefs.getBoolean("use_post_processing", false);
+                boolean blendModeAuto = prefs.getBoolean("blend_mode_auto", false);
+                float blendScale = prefs.getFloat("blend_scale", FrameGenerationEffect.DEFAULT_BLEND_SCALE);
 
-                frameGenerationEffect = new FrameGenerationEffect(generationMode, fpsMultiplier, blendFactor);
+                frameGenerationEffect = new FrameGenerationEffect(generationMode, fpsMultiplier, apiMode, usePostProcessing, blendModeAuto, blendScale);
                 renderer.getEffectComposer().addEffect(frameGenerationEffect);
                 frameGenerationEffect.toggleGeneration();
                 frameGenerationEffect.setDisplayRefreshRate(getRefreshRate());
