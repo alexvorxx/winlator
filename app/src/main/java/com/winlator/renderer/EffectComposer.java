@@ -262,7 +262,7 @@ public class EffectComposer {
                 frameGenerationEffect.toggleGeneration();
                 removeEffect(frameGenerationEffect);
 
-                frameGenerationEffect = new FrameGenerationEffect(generationMode, fpsMultiplier, apiMode,
+                frameGenerationEffect = new FrameGenerationEffect(renderer, generationMode, fpsMultiplier, apiMode,
                         usePostProcessing, blendModeAuto, blendScale);
                 addEffect(frameGenerationEffect);
                 frameGenerationEffect.toggleGeneration();

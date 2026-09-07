@@ -22,7 +22,7 @@ Java_com_winlator_renderer_effects_FrameGenerationEffect_nativeInitQCOM(JNIEnv* 
         glTexEstimateMotionQCOM = (PFNGLTEXESTIMATEMOTIONQCOM)eglGetProcAddress("glTexEstimateMotionQCOM");
 
     if (glTexEstimateMotionQCOM) {
-        LOGI("Loaded GL_QCOM_motion_estimation");
+        LOGI("glTexEstimateMotionQCOM ptr = %p", glTexEstimateMotionQCOM);
         return JNI_TRUE;
     } else {
         LOGE("Extension present but function not found");
@@ -35,7 +35,11 @@ extern "C" JNIEXPORT void JNICALL
 Java_com_winlator_renderer_effects_FrameGenerationEffect_nativeTexEstimateMotionQCOM(JNIEnv* env, jclass clazz,
                                                                                      jint ref, jint target, jint output) {
     if (glTexEstimateMotionQCOM) {
-        //LOGI("glTexEstimateMotionQCOM called");
+        //LOGI("Calling glTexEstimateMotionQCOM(ref=%d, target=%d, output=%d)", ref, target, output);
         glTexEstimateMotionQCOM(ref, target, output);
+    }
+    if (!glTexEstimateMotionQCOM) {
+        LOGE("glTexEstimateMotionQCOM is NULL!");
+        return;
     }
 }

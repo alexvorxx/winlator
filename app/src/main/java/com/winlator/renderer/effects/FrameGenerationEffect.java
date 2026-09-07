@@ -5,16 +5,17 @@ import android.opengl.GLES30;
 import android.util.Log;
 
 import com.winlator.renderer.EffectComposer;
+import com.winlator.renderer.GLRenderer;
 import com.winlator.renderer.material.ScreenMaterial;
 import com.winlator.renderer.material.ShaderMaterial;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.FloatBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
 public class FrameGenerationEffect extends Effect {
+    // Constants
     public static final int GENERATION_MODE_FAST = 0;
     public static final int GENERATION_MODE_BALANCED = 1;
     public static final int GENERATION_MODE_QUALITY = 2;
@@ -28,41 +29,6 @@ public class FrameGenerationEffect extends Effect {
     public static final int FPS_MULTIPLIER_X3 = 3;
     public static final int FPS_MULTIPLIER_X4 = 4;
 
-    public static final int API_GLES20 = 0;
-    public static final int API_QUALCOMM = 1;
-
-    private int fpsMultiplier;
-    private int generationMode;
-
-    private static final long NANOS_PER_SECOND = 1_000_000_000L;
-    private static final long NANOS_PER_MILLISECOND = 1_000_000L;
-
-    private long lastRealFrameTimeNs = 0;
-    private long lastAnyFrameShownTimeNs = 0;
-    private long nextFrameTimeNs = 0;
-
-    private long currentRealFrameIntervalNs = 33333333;  // 30 FPS
-    private long currentTargetFrameIntervalNs = 16666666;  // 60 FPS
-
-    private static final long MIN_FRAME_INTERVAL_NS = 8 * NANOS_PER_MILLISECOND;
-    private static final long MAX_FRAME_INTERVAL_NS = 1000 * NANOS_PER_MILLISECOND;
-
-    private boolean isEnabled = false;
-
-    private int apiMode;
-    private boolean usePostProcessing;
-    private boolean blendModeAuto;
-    private float blendFactor;
-    private float blendScale;
-
-    private int textureHistory = -1;
-    private int texturePrev = -1;
-    private int textureCurr = -1;
-
-    private boolean hasFirstFrame = false;
-    private boolean hasSecondFrame = false;
-    private boolean waitingForSecondFrame = true;
-
     public static final int FPS_AUTO = 0;
     public static final int FPS_15 = 15;
     public static final int FPS_20 = 20;
@@ -71,14 +37,55 @@ public class FrameGenerationEffect extends Effect {
     public static final int FPS_45 = 45;
     public static final int FPS_60 = 60;
 
-    private int initialFPS = FPS_30;
-    private boolean autoDetectFPS = false;
+    public static final int API_GLES20 = 0;
+    public static final int API_QUALCOMM = 1;
 
-    private List<Long> realFrameIntervals = new ArrayList<>();
+    private static final long NANOS_PER_SECOND = 1_000_000_000L;
+    private static final long NANOS_PER_MILLISECOND = 1_000_000L;
+
+    private static final long MIN_FRAME_INTERVAL_NS = 8 * NANOS_PER_MILLISECOND;
+    private static final long MAX_FRAME_INTERVAL_NS = 1000 * NANOS_PER_MILLISECOND;
+
     private static final int FRAME_HISTORY_SIZE = 10;
 
     private static final String TAG = "FrameGeneration";
 
+    // Fields
+    private boolean isEnabled = false;
+    private int fpsMultiplier;
+    private int generationMode;
+    private int apiMode;
+    private boolean usePostProcessing;
+    private boolean blendModeAuto;
+    private float blendFactor;
+    private float blendScale;
+
+    private boolean hasFirstFrame = false;
+    private boolean hasSecondFrame = false;
+    private boolean waitingForSecondFrame = true;
+
+    private int initialFPS = FPS_30;
+    private boolean autoDetectFPS = false;
+
+    private int currentWidth = 0;
+    private int currentHeight = 0;
+
+    // QCOM fields
+    private boolean qcomInitialized = false;
+    private boolean hasMotionEstimation = false;
+    private boolean useHardwareMotion = false;
+
+    private int qcomRefLuminanceFBO = -1;
+    private int qcomTargetLuminanceFBO = -1;
+
+    private int qcomLuminanceProgram = -1;
+
+    private int qcomSearchBlockX = 1;
+    private int qcomSearchBlockY = 1;
+    private int lumaWidth = 0;
+    private int lumaHeight = 0;
+
+    // Uniform locations
     public int uIsEnabledLoc = -1;
     private int uBlendFactorLoc = -1;
     private int uTextureHistoryLoc = -1;
@@ -87,22 +94,21 @@ public class FrameGenerationEffect extends Effect {
     private int uResolutionLoc = -1;
     private int uUsePostProc = -1;
 
-    // QCOM fields
-    private boolean hasMotionEstimation = false;
-    private boolean useHardwareMotion = false;
+    // Uniform locations for hardware paths
+    private int uMotionTextureLoc = -1;
+    private int uUseHardwareMotionLoc = -1;
+
+    // Textures
+    private int textureHistory = -1;
+    private int texturePrev = -1;
+    private int textureCurr = -1;
 
     private int qcomMotionTexture = -1;      // RGBA16F for motion vectors
     private int qcomRefLuminanceTexture = -1;   // R8 luminance of prev frame
     private int qcomTargetLuminanceTexture = -1; // R8 luminance of curr frame
-    private int qcomLuminanceFBO = -1;       // FBO for luminance copy
-    private int qcomLuminanceProgram = -1;   // shader program for luminance copy
 
-    private int qcomSearchBlockX = 1;
-    private int qcomSearchBlockY = 1;
-
-    // Uniform locations for hardware paths
-    private int uMotionTextureLoc = -1;
-    private int uUseHardwareMotionLoc = -1;
+    // Time
+    private List<Long> realFrameIntervals = new ArrayList<>();
 
     private int displayRefreshRate = 60;
     private int realFrameDisplayCount = 0;
@@ -120,10 +126,16 @@ public class FrameGenerationEffect extends Effect {
     private boolean hasCapturedFrame = false;
     private boolean skipFirstRealDisplay = false;
 
-    private int currentWidth = 0;
-    private int currentHeight = 0;
+    private long lastRealFrameTimeNs = 0;
+    private long lastAnyFrameShownTimeNs = 0;
+    private long nextFrameTimeNs = 0;
 
-    private boolean qcomInitialized = false;
+    private long currentRealFrameIntervalNs = 33333333;  // 30 FPS
+    private long currentTargetFrameIntervalNs = 16666666;  // 60 FPS
+
+    private final LumaMaterial lumaMaterial = new LumaMaterial();
+
+    private final GLRenderer renderer;
 
     // Native methods (return boolean for init success)
     private static native boolean nativeInitQCOM();
@@ -138,8 +150,10 @@ public class FrameGenerationEffect extends Effect {
             Log.d(TAG, message);
     }
 
-    public FrameGenerationEffect(int generationMode, int fpsMultiplier, int apiMode, boolean enablePostProcessing, boolean blendModeAuto, float blendScale) {
+    public FrameGenerationEffect(GLRenderer renderer, int generationMode, int fpsMultiplier, int apiMode,
+                                 boolean enablePostProcessing, boolean blendModeAuto, float blendScale) {
         super();
+        this.renderer = renderer;
         this.generationMode = generationMode;
         this.fpsMultiplier = fpsMultiplier;
         this.apiMode = apiMode;
@@ -530,12 +544,42 @@ public class FrameGenerationEffect extends Effect {
                     ensureQCOMMotionTextures(width, height);
                     if (qcomRefLuminanceTexture != -1 && qcomTargetLuminanceTexture != -1 &&
                             qcomMotionTexture != -1) {
-                        // Convert textures to luminance
-                        copyTextureToR8(texturePrev, qcomRefLuminanceTexture, width, height);
-                        copyTextureToR8(textureCurr, qcomTargetLuminanceTexture, width, height);
 
-                        // Run motion estimation
+                        // 1. Convert to luminance
+                        copyTextureToR8(renderer, texturePrev, qcomRefLuminanceFBO, lumaWidth, lumaHeight);
+                        GLES20.glFinish();
+                        copyTextureToR8(renderer, textureCurr, qcomTargetLuminanceFBO, lumaWidth, lumaHeight);
+                        GLES20.glFinish();
+
+                        // Reset before QCOM
+                        for (int i = 0; i < 5; i++) {
+                            GLES20.glActiveTexture(GLES20.GL_TEXTURE0 + i);
+                            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+                        }
+                        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+                        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
+                        while (GLES20.glGetError() != GLES20.GL_NO_ERROR);
+
+                        // 5. QCOM motion estimation
                         nativeTexEstimateMotionQCOM(qcomRefLuminanceTexture, qcomTargetLuminanceTexture, qcomMotionTexture);
+
+                        int err = GLES20.glGetError();
+                        if (err != GLES20.GL_NO_ERROR) {
+                            Log.e(TAG, "nativeTexEstimateMotionQCOM error: 0x" + Integer.toHexString(err));
+                            useHardwareMotion = false;
+                        } else {
+                            GLES20.glFinish();
+                            useHardwareMotion = true;
+                            LogString("Hardware motion estimation OK");
+                        }
+
+                        // After copyTextureToR8 and glFinish:
+                        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, qcomRefLuminanceFBO);
+                        ByteBuffer buf = ByteBuffer.allocateDirect(4).order(ByteOrder.nativeOrder());
+                        GLES20.glReadPixels(width/2, height/2, 1, 1, GLES30.GL_RED, GLES20.GL_UNSIGNED_BYTE, buf);
+                        //Log.d(TAG, "REF_LUMA via dedicated FBO: " + (buf.get(0) & 0xFF));
+                        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
+
                         useHardwareMotion = true;
                         LogString("Using hardware motion estimation");
                     }
@@ -671,9 +715,13 @@ public class FrameGenerationEffect extends Effect {
             GLES20.glDeleteTextures(1, new int[]{qcomTargetLuminanceTexture}, 0);
             qcomTargetLuminanceTexture = -1;
         }
-        if (qcomLuminanceFBO != -1) {
-            GLES20.glDeleteFramebuffers(1, new int[]{qcomLuminanceFBO}, 0);
-            qcomLuminanceFBO = -1;
+        if (qcomRefLuminanceFBO != -1) {
+            GLES20.glDeleteFramebuffers(1, new int[]{qcomRefLuminanceFBO}, 0);
+            qcomRefLuminanceFBO = -1;
+        }
+        if (qcomTargetLuminanceFBO != -1) {
+            GLES20.glDeleteFramebuffers(1, new int[]{qcomTargetLuminanceFBO}, 0);
+            qcomTargetLuminanceFBO = -1;
         }
         if (qcomLuminanceProgram != -1) {
             GLES20.glDeleteProgram(qcomLuminanceProgram);
@@ -684,30 +732,23 @@ public class FrameGenerationEffect extends Effect {
     public boolean isEnabled() { return isEnabled; }
 
     private int captureCurrentFrameSimple(int width, int height) {
-        LogString("Using SIMPLE capture method");
-
         int[] textures = new int[1];
         GLES20.glGenTextures(1, textures, 0);
         int newTexture = textures[0];
 
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, newTexture);
-
-        GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA,
-                    width, height, 0, GLES20.GL_RGBA,
-                    GLES20.GL_UNSIGNED_BYTE, null);
-
+        // glTexImage2D, not glTexStorage2D
+        GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES30.GL_RGBA8,
+                width, height, 0, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, null);
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
 
-        GLES20.glCopyTexSubImage2D(GLES20.GL_TEXTURE_2D, 0,
-                0, 0,
-                0, 0,
-                width, height);
-
-        LogString("Simple capture completed, texture: " + newTexture);
-
+        GLES20.glCopyTexSubImage2D(GLES20.GL_TEXTURE_2D, 0, 0, 0, 0, 0, width, height);
         return newTexture;
     }
+
 
     private void calculateBlendFactor() {
         if (fpsMultiplier == FPS_MULTIPLIER_X2) {
@@ -770,49 +811,72 @@ public class FrameGenerationEffect extends Effect {
     }
 
     private void ensureQCOMMotionTextures(int width, int height) {
-        int motionWidth = Math.max(1, width / qcomSearchBlockX);
-        int motionHeight = Math.max(1, height / qcomSearchBlockY);
+        // Align by block — QCOM requires multiplicity
+        lumaWidth = (width / qcomSearchBlockX) * qcomSearchBlockX;
+        lumaHeight = (height / qcomSearchBlockY) * qcomSearchBlockY;
+        if (lumaWidth <= 0 || lumaHeight <= 0) return;
 
-        // Create luminance textures (R8)
+        int motionWidth = lumaWidth / qcomSearchBlockX;
+        int motionHeight = lumaHeight / qcomSearchBlockY;
+
+        // Ref luminance
         if (qcomRefLuminanceTexture == -1) {
             int[] tex = new int[1];
             GLES20.glGenTextures(1, tex, 0);
             qcomRefLuminanceTexture = tex[0];
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, qcomRefLuminanceTexture);
-            GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES30.GL_R8, width, height, 0,
-                    GLES30.GL_RED, GLES20.GL_UNSIGNED_BYTE, null);
+            GLES30.glTexStorage2D(GLES20.GL_TEXTURE_2D, 1, GLES30.GL_R8, lumaWidth, lumaHeight);
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
+
+            // Dedicated FBO, pre-attached
+            int[] fbo = new int[1];
+            GLES20.glGenFramebuffers(1, fbo, 0);
+            qcomRefLuminanceFBO = fbo[0];
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, qcomRefLuminanceFBO);
+            GLES20.glFramebufferTexture2D(GLES20.GL_FRAMEBUFFER, GLES20.GL_COLOR_ATTACHMENT0,
+                    GLES20.GL_TEXTURE_2D, qcomRefLuminanceTexture, 0);
+            GLES20.glClearColor(0f, 0f, 0f, 1f);
+            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
         }
+
+        // Target luminance
         if (qcomTargetLuminanceTexture == -1) {
             int[] tex = new int[1];
             GLES20.glGenTextures(1, tex, 0);
             qcomTargetLuminanceTexture = tex[0];
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, qcomTargetLuminanceTexture);
-            GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES30.GL_R8, width, height, 0,
-                    GLES30.GL_RED, GLES20.GL_UNSIGNED_BYTE, null);
+            GLES30.glTexStorage2D(GLES20.GL_TEXTURE_2D, 1, GLES30.GL_R8, lumaWidth, lumaHeight);
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
-        }
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
 
-        // Create motion output texture (RGBA16F)
+            int[] fbo = new int[1];
+            GLES20.glGenFramebuffers(1, fbo, 0);
+            qcomTargetLuminanceFBO = fbo[0];
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, qcomTargetLuminanceFBO);
+            GLES20.glFramebufferTexture2D(GLES20.GL_FRAMEBUFFER, GLES20.GL_COLOR_ATTACHMENT0,
+                    GLES20.GL_TEXTURE_2D, qcomTargetLuminanceTexture, 0);
+            GLES20.glClearColor(0f, 0f, 0f, 1f);
+            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
+        }
         if (qcomMotionTexture == -1) {
             int[] tex = new int[1];
             GLES20.glGenTextures(1, tex, 0);
             qcomMotionTexture = tex[0];
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, qcomMotionTexture);
-            GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES30.GL_RGBA16F, motionWidth, motionHeight, 0,
-                    GLES30.GL_RGBA, GLES30.GL_HALF_FLOAT, null);
+            GLES30.glTexStorage2D(GLES20.GL_TEXTURE_2D, 1, GLES30.GL_RGBA16F, motionWidth, motionHeight);
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST);
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST);
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
         }
 
-        // Create FBO for luminance copy if needed
-        if (qcomLuminanceFBO == -1) {
-            int[] fbo = new int[1];
-            GLES20.glGenFramebuffers(1, fbo, 0);
-            qcomLuminanceFBO = fbo[0];
-        }
         if (qcomLuminanceProgram == -1) {
             qcomLuminanceProgram = createLuminanceCopyProgram();
         }
@@ -873,56 +937,55 @@ public class FrameGenerationEffect extends Effect {
         return shader;
     }
 
-    private void copyTextureToR8(int srcTexture, int dstTexture, int width, int height) {
-        if (srcTexture == -1 || dstTexture == -1 || qcomLuminanceFBO == -1 || qcomLuminanceProgram == -1)
-            return;
+    private void copyTextureToR8(GLRenderer renderer, int srcTexture, int dstFBO, int width, int height) {
+        if (srcTexture == -1 || dstFBO == -1) return;
 
-        // Save current FBO binding
         int[] prevFBO = new int[1];
         GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, prevFBO, 0);
 
-        // Bind our FBO and attach destination
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, qcomLuminanceFBO);
-        GLES20.glFramebufferTexture2D(GLES20.GL_FRAMEBUFFER, GLES20.GL_COLOR_ATTACHMENT0,
-                GLES20.GL_TEXTURE_2D, dstTexture, 0);
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, dstFBO);
+
+        // Completeness
         int status = GLES20.glCheckFramebufferStatus(GLES20.GL_FRAMEBUFFER);
         if (status != GLES20.GL_FRAMEBUFFER_COMPLETE) {
-            Log.e(TAG, "Luminance FBO incomplete: " + status);
+            Log.e(TAG, "Luma FBO incomplete: 0x" + Integer.toHexString(status));
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, prevFBO[0]);
             return;
         }
 
         GLES20.glViewport(0, 0, width, height);
-        GLES20.glUseProgram(qcomLuminanceProgram);
+        renderer.setViewportNeedsUpdate(true);
+        GLES20.glDisable(GLES20.GL_BLEND);
 
-        // Bind source texture to unit 0
+        lumaMaterial.use();
+        renderer.getQuadVertices().bind(lumaMaterial.programId);
+
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, srcTexture);
-        int uSrcLoc = GLES20.glGetUniformLocation(qcomLuminanceProgram, "uSrcTexture");
-        GLES20.glUniform1i(uSrcLoc, 0);
+        GLES20.glUniform1i(lumaMaterial.getUniformLocation("screenTexture"), 0);
 
-        // Draw fullscreen quad
-        float[] vertices = {
-                -1.0f, -1.0f,
-                1.0f, -1.0f,
-                -1.0f,  1.0f,
-                1.0f,  1.0f
-        };
-        FloatBuffer vertexBuffer = ByteBuffer.allocateDirect(vertices.length * 4)
-                .order(ByteOrder.nativeOrder()).asFloatBuffer();
-        vertexBuffer.put(vertices).position(0);
-
-        int aPositionLoc = GLES20.glGetAttribLocation(qcomLuminanceProgram, "aPosition");
-        GLES20.glEnableVertexAttribArray(aPositionLoc);
-        GLES20.glVertexAttribPointer(aPositionLoc, 2, GLES20.GL_FLOAT, false, 0, vertexBuffer);
-
-        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
-
-        GLES20.glDisableVertexAttribArray(aPositionLoc);
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, renderer.quadVertices.count());
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
 
-        // Restore previous FBO
+        GLES20.glEnable(GLES20.GL_BLEND);
+        //renderer.invalidateBoundWindowMaterial();
+
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, prevFBO[0]);
+    }
+
+    private static class LumaMaterial extends ScreenMaterial {
+        @Override
+        protected String getFragmentShader() {
+            return String.join("\n",
+                    "precision mediump float;",
+                    "uniform sampler2D screenTexture;",
+                    "varying vec2 vUV;",
+                    "void main() {",
+                    "vec3 c = texture2D(screenTexture, vUV).rgb;",
+                    "gl_FragColor = vec4(dot(c, vec3(0.299, 0.587, 0.114)), 0.0, 0.0, 1.0);",
+                    "}"
+            );
+        }
     }
 
     private static class FastFrameGenerationMaterial extends ScreenMaterial {
@@ -937,15 +1000,29 @@ public class FrameGenerationEffect extends Effect {
                     "varying vec2 vUV;",
                     "uniform sampler2D uTexturePrev;",
                     "uniform sampler2D uTextureCurr;",
+                    "uniform sampler2D uMotionTexture;",
                     "uniform int uIsEnabled;",
+                    "uniform int uUseHardwareMotion;",
                     "uniform float uBlendFactor;",
+                    "uniform vec2 resolution;",
                     "uniform int uUsePostProc;",
                     "",
                     "void main() {",
                     "    if (uIsEnabled == 1) {",
                     "        vec4 prev = texture2D(uTexturePrev, vUV);",
                     "        vec4 curr = texture2D(uTextureCurr, vUV);",
-                    "        vec4 result = mix(prev, curr, uBlendFactor);",
+                    "        vec4 result;",
+                    "        if (uUseHardwareMotion == 1) {",
+                    "            vec2 motionPixels = texture2D(uMotionTexture, vUV).rg;",
+                    "            vec2 motionUV = motionPixels / resolution;",
+                    "            vec2 uvPrev = clamp(vUV - motionUV * uBlendFactor, 0.0, 1.0);",
+                    "            vec2 uvCurr = clamp(vUV + motionUV * (1.0 - uBlendFactor), 0.0, 1.0);",
+                    "            vec4 sampledPrev = texture2D(uTexturePrev, uvPrev);",
+                    "            vec4 sampledCurr = texture2D(uTextureCurr, uvCurr);",
+                    "            result = mix(sampledPrev, sampledCurr, uBlendFactor);",
+                    "        } else {",
+                    "            result = mix(prev, curr, uBlendFactor);",
+                    "        }",
                     "        if (uUsePostProc == 1) {",
                     "            float contrast = 1.04;",
                     "            result.rgb = ((result.rgb - 0.5) * contrast) + 0.5;",
@@ -982,7 +1059,8 @@ public class FrameGenerationEffect extends Effect {
 
                     "vec2 fastMotionEstimate(vec2 uv) {",
                     "    if (uUseHardwareMotion == 1) {",
-                    "        return texture2D(uMotionTexture, uv).rg;",
+                    "        vec2 motionPixels = texture2D(uMotionTexture, uv).rg;",
+                    "        return motionPixels / resolution;",
                     "    }",
                     "    vec2 texel = 1.0 / resolution;",
                     "    float minDiff = 1.0;",
@@ -1019,25 +1097,19 @@ public class FrameGenerationEffect extends Effect {
                     "}",
 
                     "vec4 generateFrame(vec2 uv) {",
-                    "    if (uIsEnabled != 1) {",
-                    "        return texture2D(uTexturePrev, uv);",
+                    "    vec2 motionUV = fastMotionEstimate(uv);",
+                    "    float motionLength = length(motionUV);",
+                    "    ",
+                    "    if (motionLength > 0.0001) {",
+                    "        vec2 uvPrev = clamp(uv - motionUV * uBlendFactor, 0.0, 1.0);",
+                    "        vec2 uvCurr = clamp(uv + motionUV * (1.0 - uBlendFactor), 0.0, 1.0);",
+                    "        vec4 colorPrev = texture2D(uTexturePrev, uvPrev);",
+                    "        vec4 colorCurr = texture2D(uTextureCurr, uvCurr);",
+                    "        return mix(colorPrev, colorCurr, uBlendFactor);",
                     "    }",
                     "    vec4 colorPrev = texture2D(uTexturePrev, uv);",
                     "    vec4 colorCurr = texture2D(uTextureCurr, uv);",
-                    "    vec2 motion = fastMotionEstimate(uv);",
-                    "    float motionLength = length(motion);",
-                    "    float edgeStrength = fastEdgeDetection(uv);",
-                    "    if (motionLength > 0.001) {",
-                    "        float motionScale = 0.5;",
-                    "        vec2 adjustedUV = uv + motion * motionScale * uBlendFactor;",
-                    "        adjustedUV = clamp(adjustedUV, 0.0, 1.0);",
-                    "        vec4 motionAdjusted = texture2D(uTexturePrev, adjustedUV);",
-                    "        return mix(motionAdjusted, colorCurr, 0.5);",
-                    "    } else if (edgeStrength > 0.1) {",
-                    "        return mix(colorPrev, colorCurr, uBlendFactor * 0.5);",
-                    "    } else {",
-                    "        return mix(colorPrev, colorCurr, uBlendFactor);",
-                    "    }",
+                    "    return mix(colorPrev, colorCurr, uBlendFactor);",
                     "}",
 
                     "vec4 applySharpen(vec4 color, vec2 uv) {",
@@ -1099,7 +1171,8 @@ public class FrameGenerationEffect extends Effect {
 
                     "vec2 enhancedMotionEstimate(vec2 uv) {",
                     "    if (uUseHardwareMotion == 1) {",
-                    "        return texture2D(uMotionTexture, uv).rg;",
+                    "        vec2 motionPixels = texture2D(uMotionTexture, uv).rg;",
+                    "        return motionPixels / resolution;",
                     "    }",
                     "    vec2 texel = 1.0 / resolution;",
                     "    float minDiff = 1.0;",
@@ -1155,17 +1228,17 @@ public class FrameGenerationEffect extends Effect {
                     "    vec4 curr = texture2D(uTextureCurr, uv);",
                     "    float motionLength = length(motion);",
                     "    float edgeStrength = enhancedEdgeDetection(uv);",
-                    "    if (motionLength > 0.001) {",
-                    "        vec2 motionDir = normalize(motion);",
-                    "        float motionScale = 0.5;",
-                    "        vec2 adjustedUV = uv + motionDir * motionScale * uBlendFactor;",
-                    "        adjustedUV = clamp(adjustedUV, 0.0, 1.0);",
-                    "        vec4 motionAdjusted = texture2D(uTexturePrev, adjustedUV);",
+                    "    ",
+                    "    if (motionLength > 0.0001) {",
+                    "        vec2 uvPrev = clamp(uv - motion * uBlendFactor, vec2(0.0), vec2(1.0));",
+                    "        vec2 uvCurr = clamp(uv + motion * (1.0 - uBlendFactor), vec2(0.0), vec2(1.0));",
+                    "        vec4 motionPrev = texture2D(uTexturePrev, uvPrev);",
+                    "        vec4 motionCurr = texture2D(uTextureCurr, uvCurr);",
                     "        float adaptiveBlend = uBlendFactor;",
                     "        if (edgeStrength > 0.2) {",
                     "            adaptiveBlend = mix(uBlendFactor, 0.5, edgeStrength);",
                     "        }",
-                    "        return mix(motionAdjusted, curr, adaptiveBlend);",
+                    "        return mix(motionPrev, motionCurr, adaptiveBlend);",
                     "    }",
                     "    float textureDetail = fastTextureDetection(uv);",
                     "    if (textureDetail < 0.1) {",
