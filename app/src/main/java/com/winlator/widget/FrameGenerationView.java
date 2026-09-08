@@ -82,7 +82,7 @@ public class FrameGenerationView extends FrameLayout {
     };
 
     private static final String[] BLEND_MODE_OPTIONS = {
-            "Auto", "Scale"
+            "Auto", "Fixed"
     };
 
     private static final int[] API_MODE_VALUES = {
@@ -377,7 +377,7 @@ public class FrameGenerationView extends FrameLayout {
         fpsMultiplier = prefs.getInt("fps_multiplier", FrameGenerationEffect.FPS_MULTIPLIER_X2);
         apiMode = prefs.getInt("api_mode", FrameGenerationEffect.API_QUALCOMM);
         usePostProcessing = prefs.getBoolean("use_post_processing", false);
-        blendModeAuto = prefs.getBoolean("blend_mode_auto", false);
+        blendModeAuto = prefs.getBoolean("blend_mode_auto", true);
         blendScale = prefs.getFloat("blend_scale", FrameGenerationEffect.DEFAULT_BLEND_SCALE);
 
         int progress = Math.round(blendScale * 50);

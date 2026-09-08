@@ -413,12 +413,13 @@
     <string name="do_you_want_to_add_a_new_profile" translatable="false">Do you want to add a new profile?</string>
     <string name="default_profile" translatable="false">Default Profile</string>
     <string name="screen_effect" translatable="false">Screen effects</string>
-    <string name="enable_fxaa" translatable="false">Enable FXAA</string>
-    <string name="enable_crt_shader" translatable="false">Enable CRT Shader</string>
-    <string name="enable_toon_shader" translatable="false">Enable Toon Shader</string>
-    <string name="enable_ntsc_effect" translatable="false">Enable NTSC Effect</string>
+    <string name="enable_fxaa" translatable="false">FXAA Effect</string>
+    <string name="enable_crt_shader" translatable="false">CRT Shader</string>
+    <string name="enable_toon_shader" translatable="false">Toon Shader</string>
+    <string name="enable_ntsc_effect" translatable="false">NTSC Effect</string>
     <string name="enable_custom_effect" translatable="false">Enable Frame Interpolation</string>
     <string name="enter_profile_name" translatable="false">Enter Profile Name</string>
+    <string name="anti_artefacts_fix" translatable="false">Anti-artefacts fix (a8xx)</string>
 
     <string name="not_connected" translatable="false">Not connected</string>
     <string name="preferences_button_text" translatable="false">   PREFERENCES   </string>

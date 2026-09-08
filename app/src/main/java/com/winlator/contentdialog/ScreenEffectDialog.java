@@ -41,6 +41,7 @@ public class ScreenEffectDialog extends ContentDialog {
     private final CheckBox cbEnableFXAA;
     private final CheckBox cbEnableToonShader;
     private final CheckBox cbEnableNTSCEffect;
+    private final CheckBox cbAntiArtefactsFix;
     private final SharedPreferences preferences;
     private final Spinner sProfile;
 
@@ -57,10 +58,9 @@ public class ScreenEffectDialog extends ContentDialog {
         sProfile = findViewById(R.id.SProfile);
         cbEnableFXAA = findViewById(R.id.CBEnableFXAA);
         cbEnableCRTShader = findViewById(R.id.CBEnableCRTShader);
-
         cbEnableToonShader = findViewById(R.id.CBEnableToonShader);
         cbEnableNTSCEffect = findViewById(R.id.CBEnableNTSCEffect);
-
+        cbAntiArtefactsFix = findViewById(R.id.CBAntiArtefactsFix);
 
         GLRenderer renderer = activity.getXServerView().getRenderer();
         if (renderer == null) {
@@ -74,6 +74,11 @@ public class ScreenEffectDialog extends ContentDialog {
         NTSCCombinedEffect ntscEffect = (NTSCCombinedEffect) renderer.getEffectComposer().getEffect(NTSCCombinedEffect.class);
 
         Log.d(TAG, "ScreenEffectDialog initialized");
+
+        SharedPreferences prefs = getContext().getSharedPreferences("screen_effect_dialog", Context.MODE_PRIVATE);
+        boolean enableAntiArtefactsFix = prefs.getBoolean("anti_artefacts", false);
+        renderer.getEffectComposer().setAntiArtefactsFixNeeded(enableAntiArtefactsFix);
+        cbAntiArtefactsFix.setChecked(enableAntiArtefactsFix);
 
         cbEnableFXAA.setChecked(fxaaEffect != null);
         cbEnableCRTShader.setChecked(crtEffect != null);
@@ -101,6 +106,7 @@ public class ScreenEffectDialog extends ContentDialog {
         findViewById(R.id.BTConfirm).setOnClickListener(v -> {
             Log.d(TAG, "BTConfirm clicked. Preparing to save profile and apply effects.");
             saveProfile(sProfile);
+            prefs.edit().putBoolean("anti_artefacts", cbAntiArtefactsFix.isChecked()).apply();
             Log.d(TAG, "Profile saved.");
 
             // Directly calling applyEffects to ensure it's triggered
@@ -218,6 +224,7 @@ public class ScreenEffectDialog extends ContentDialog {
                 cbEnableCRTShader.setChecked(settings.getBoolean("crt_shader", false));
                 cbEnableToonShader.setChecked(settings.getBoolean("toon_shader", false));
                 cbEnableNTSCEffect.setChecked(settings.getBoolean("ntsc_effect", false));
+                cbAntiArtefactsFix.setChecked(settings.getBoolean("anti_artefacts", false));
                 return;
             }
         }
@@ -248,6 +255,7 @@ public class ScreenEffectDialog extends ContentDialog {
             settings.put("crt_shader", cbEnableCRTShader.isChecked());
             settings.put("toon_shader", cbEnableToonShader.isChecked());
             settings.put("ntsc_effect", cbEnableNTSCEffect.isChecked());
+            settings.put("anti_artefacts", cbAntiArtefactsFix.isChecked());
 
             for (String profile : oldProfiles) {
                 String[] parts = profile.split(":");
@@ -269,6 +277,7 @@ public class ScreenEffectDialog extends ContentDialog {
         boolean enableCRTShader = cbEnableCRTShader.isChecked();
         boolean enableToonShader = cbEnableToonShader.isChecked();
         boolean enableNTSCEffect = cbEnableNTSCEffect.isChecked();
+        boolean enableAntiArtefactsFix = cbAntiArtefactsFix.isChecked();
 
         Log.d(TAG, "FXAA Enabled: " + enableFXAA + ", CRT Shader Enabled: " + enableCRTShader);
 
@@ -282,6 +291,8 @@ public class ScreenEffectDialog extends ContentDialog {
             Log.e(TAG, "EffectComposer is null!");
             return;
         }
+
+        renderer.getEffectComposer().setAntiArtefactsFixNeeded(enableAntiArtefactsFix);
 
         // Apply or remove FXAAEffect
         if (enableFXAA) {
@@ -384,7 +395,7 @@ public class ScreenEffectDialog extends ContentDialog {
                 int fpsMultiplier = prefs.getInt("fps_multiplier", FrameGenerationEffect.FPS_MULTIPLIER_X2);
                 int apiMode = prefs.getInt("api_mode", FrameGenerationEffect.API_QUALCOMM);
                 boolean usePostProcessing = prefs.getBoolean("use_post_processing", false);
-                boolean blendModeAuto = prefs.getBoolean("blend_mode_auto", false);
+                boolean blendModeAuto = prefs.getBoolean("blend_mode_auto", true);
                 float blendScale = prefs.getFloat("blend_scale", FrameGenerationEffect.DEFAULT_BLEND_SCALE);
 
                 frameGenerationEffect = new FrameGenerationEffect(renderer, generationMode, fpsMultiplier, apiMode,

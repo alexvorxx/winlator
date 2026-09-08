@@ -7,6 +7,7 @@ import android.util.Log;
 import com.winlator.renderer.effects.Effect;
 import com.winlator.renderer.effects.FrameGenerationEffect;
 import com.winlator.renderer.effects.ToonEffect;
+import com.winlator.renderer.material.ScreenMaterial;
 import com.winlator.renderer.material.ShaderMaterial;
 
 import java.util.ArrayList;
@@ -30,6 +31,9 @@ public class EffectComposer {
     private long lastTime = 0;
     private int frameCount = 0;
     private long lastFPS = 0;
+
+    private ResolveMaterial resolveMaterial;
+    private boolean antiArtefactsFixNeeded = false;
 
     private void LogString(String message) {
         if (logEnabled)
@@ -133,6 +137,28 @@ public class EffectComposer {
 
             // Draw the initial frame
             renderer.drawFrame();
+
+            // Resolve-pass: force texture read and write clean copy in writeBuffer → swap → readBuffer
+            if (antiArtefactsFixNeeded && hasEffects() && effects.size() > 0) {
+                if (resolveMaterial == null) {
+                    resolveMaterial = new ResolveMaterial();
+                }
+                GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, writeBuffer.getFramebuffer());
+                GLES20.glViewport(0, 0, renderer.surfaceWidth, renderer.surfaceHeight);
+                renderer.setViewportNeedsUpdate(true);
+                GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+
+                resolveMaterial.use();
+                GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, readBuffer.getTextureId());
+                resolveMaterial.setUniformInt("screenTexture", 0);
+                renderer.getQuadVertices().bind(resolveMaterial.programId);
+                GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, renderer.quadVertices.count());
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+                GLES20.glFinish();
+
+                swapBuffers();
+            }
 
             for (int i = 0; i < effects.size(); i++) {
                 Effect effect = effects.get(i);
@@ -300,6 +326,15 @@ public class EffectComposer {
         return null;
     }
 
+    public void setAntiArtefactsFixNeeded(boolean antiArtefactsFixNeeded) {
+        this.antiArtefactsFixNeeded = antiArtefactsFixNeeded;
+        Log.d(TAG, "antiArtefactsFixNeeded = " + antiArtefactsFixNeeded);
+    }
+
+    public boolean isAntiArtefactsFixNeeded() {
+        return antiArtefactsFixNeeded;
+    }
+
     public static class FrameGenerationSettings {
         public final int initialFPS;
         public final boolean autoDetect;
@@ -316,4 +351,19 @@ public class EffectComposer {
             this.fpsMultiplier = fpsMultiplier;
         }
     }
+
+    private static class ResolveMaterial extends ScreenMaterial {
+        @Override
+        protected String getFragmentShader() {
+            return String.join("\n", new CharSequence[]{
+                    "precision highp float;",
+                    "uniform sampler2D screenTexture;",
+                    "varying vec2 vUV;",
+                    "void main() {",
+                    "    gl_FragColor = texture2D(screenTexture, vUV);",
+                    "}"
+            });
+        }
+    }
+
 }

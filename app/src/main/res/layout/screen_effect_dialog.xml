@@ -14,7 +14,7 @@
         <View style="@style/VerticalLine" />
 
         <LinearLayout
-            android:layout_width="0.0dip"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_weight="1.0"
             android:orientation="vertical">
@@ -25,7 +25,7 @@
                 android:text="@string/profile" />
 
             <LinearLayout
-                android:layout_width="fill_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
@@ -33,7 +33,7 @@
                 <Spinner
                     android:id="@id/SProfile"
                     style="@style/ComboBox"
-                    android:layout_width="0.0dip"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_weight="1.0" />
 
@@ -52,32 +52,64 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <CheckBox
-                android:id="@+id/CBEnableFXAA"
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8.0dip"
-                android:text="@string/enable_fxaa" />
+                android:orientation="horizontal">
 
-            <CheckBox
-                android:id="@+id/CBEnableCRTShader"
-                android:layout_width="wrap_content"
+                <CheckBox
+                    android:id="@+id/CBEnableFXAA"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="start"
+                    android:text="@string/enable_fxaa" />
+
+                <CheckBox
+                    android:id="@+id/CBEnableCRTShader"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="end"
+                    android:text="@string/enable_crt_shader" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/enable_crt_shader" />
+                android:layout_marginTop="8.0dip"
+                android:orientation="horizontal">
 
-            <CheckBox
-                android:id="@+id/CBEnableToonShader"
-                android:layout_width="wrap_content"
+                <CheckBox
+                    android:id="@+id/CBEnableNTSCEffect"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/enable_ntsc_effect" />
+
+                <CheckBox
+                    android:id="@+id/CBEnableToonShader"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/enable_toon_shader" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/enable_toon_shader" />
+                android:layout_marginTop="8.0dip"
+                android:orientation="horizontal">
 
-            <CheckBox
-                android:id="@+id/CBEnableNTSCEffect"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/enable_ntsc_effect" />
+                <CheckBox
+                    android:id="@+id/CBAntiArtefactsFix"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/anti_artefacts_fix"
+                    android:textStyle="italic" />
 
-<!--            <View style="@style/HorizontalLine" />-->
+            </LinearLayout>
+
+            <!--            <View style="@style/HorizontalLine" />-->
 
             <Button
                 android:id="@+id/ButtonAddGenerationView"
@@ -85,7 +117,7 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="start"
                 android:text="@string/frame_generation"
-                android:visibility="visible"/>
+                android:visibility="visible" />
 
         </LinearLayout>
     </LinearLayout>
