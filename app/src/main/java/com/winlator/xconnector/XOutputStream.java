@@ -6,8 +6,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.locks.ReentrantLock;
 
-import dalvik.annotation.optimization.CriticalNative;
-
 public class XOutputStream {
     private final ReentrantLock lock = new ReentrantLock();
     private final long nativePtr;
@@ -104,22 +102,22 @@ public class XOutputStream {
 
     private native long nativeAllocate(int fd, int initialCapacity);
 
-    @CriticalNative
+    
     private static native void setAncillaryFd(long nativePtr, int ancillaryFd);
 
-    @CriticalNative
+    
     private static native void writeByte(long nativePtr, byte value);
 
-    @CriticalNative
+    
     private static native void writeShort(long nativePtr, short value);
 
-    @CriticalNative
+    
     private static native void writeInt(long nativePtr, int value);
 
-    @CriticalNative
+    
     private static native void writeLong(long nativePtr, long value);
 
-    @CriticalNative
+    
     private static native void writePad(long nativePtr, int length);
 
     private static native void writeAt(long nativePtr, int position, byte[] data);
@@ -130,6 +128,6 @@ public class XOutputStream {
 
     private static native void destroy(long nativePtr);
 
-    @CriticalNative
+    
     private static native int length(long nativePtr);
 }

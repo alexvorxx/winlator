@@ -7,8 +7,6 @@ package com.winlator.core;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import dalvik.annotation.optimization.CriticalNative;
-
 public abstract class GPUHelper {
   static {
     System.loadLibrary("winlator");
@@ -58,7 +56,6 @@ public abstract class GPUHelper {
 
   public static native String[] vkGetDeviceExtensions();
 
-  @CriticalNative
   public static native int vkGetApiVersion();
 
   public static native void setGlobalEGLContext();

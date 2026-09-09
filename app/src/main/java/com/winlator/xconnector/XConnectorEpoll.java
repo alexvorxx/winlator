@@ -7,8 +7,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import dalvik.annotation.optimization.CriticalNative;
-
 public class XConnectorEpoll {
     private final ConnectionHandler connectionHandler;
     private final RequestHandler requestHandler;
@@ -142,7 +140,6 @@ public class XConnectorEpoll {
         this.multithreadedClients = multithreadedClients;
     }
 
-    @CriticalNative
     public static native void closeFd(int fd);
 
     private native long nativeAllocate(String sockPath);

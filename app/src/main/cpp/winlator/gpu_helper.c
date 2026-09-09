@@ -62,7 +62,7 @@ done:
 }
 
 JNIEXPORT jint JNICALL
-Java_com_winlator_core_GPUHelper_vkGetApiVersion() {
+Java_com_winlator_core_GPUHelper_vkGetApiVersion(JNIEnv *env, jclass obj) {
     int version = 0;
     char* content = fileGetContents(APP_CACHE_DIR "/.vk-api-version", NULL, NULL);
     if (content) {

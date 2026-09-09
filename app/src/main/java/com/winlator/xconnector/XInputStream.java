@@ -4,8 +4,6 @@ import com.winlator.xserver.XServer;
 
 import java.nio.ByteBuffer;
 
-import dalvik.annotation.optimization.CriticalNative;
-
 public class XInputStream {
     private final long nativePtr;
 
@@ -91,35 +89,26 @@ public class XInputStream {
 
     private native long nativeAllocate(int fd, int initialCapacity);
 
-    @CriticalNative
     private static native byte readByte(long nativePtr);
 
-    @CriticalNative
     private static native short readShort(long nativePtr);
 
-    @CriticalNative
     private static native int readInt(long nativePtr);
 
-    @CriticalNative
     private static native long readLong(long nativePtr);
 
     private static native ByteBuffer readByteBuffer(long nativePtr, int length);
 
-    @CriticalNative
     private static native void skip(long nativePtr, int length);
 
-    @CriticalNative
     private static native int available(long nativePtr);
 
     private static native int readMoreData(long nativePtr, boolean canReceiveAncillaryMessages);
 
-    @CriticalNative
     private static native int getActivePosition(long nativePtr);
 
-    @CriticalNative
     private static native void setActivePosition(long nativePtr, int activePosition);
 
-    @CriticalNative
     private static native int getAncillaryFd(long nativePtr);
 
     private static native void destroy(long nativePtr);
