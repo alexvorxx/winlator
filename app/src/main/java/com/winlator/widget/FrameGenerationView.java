@@ -11,6 +11,7 @@ import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.FrameLayout;
+import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.Spinner;
@@ -43,8 +44,8 @@ public class FrameGenerationView extends FrameLayout {
     private final LinearLayout LLSettings;
     private final Spinner apiModeSpinner;
     private final Spinner blendModeSpinner;
-    private final SeekBar blendScaleSeekBar;
-    private final TextView blendScaleLabel;
+    private final SeekBar motionScaleSeekBar;
+    private final TextView motionScaleLabel;
     private final ToggleButton toggleButtonPP;
 
     private static final String[] GENERATION_MODE_OPTIONS = {
@@ -97,7 +98,7 @@ public class FrameGenerationView extends FrameLayout {
     private int initialFPS;
     private int generationMode;
     private int fpsMultiplier;
-    private float blendScale;
+    private float motionScale;
     private int apiMode;
     private boolean blendModeAuto;
     private boolean usePostProcessing;
@@ -164,18 +165,22 @@ public class FrameGenerationView extends FrameLayout {
         apiModeSpinner = contentView.findViewById(R.id.api_mode_spinner);
         blendModeSpinner = contentView.findViewById(R.id.blend_mode_spinner);
 
-        blendScaleSeekBar = contentView.findViewById(R.id.SBBlendScale);
-        blendScaleLabel = contentView.findViewById(R.id.TVBlendScaleLabel);
+        motionScaleSeekBar = contentView.findViewById(R.id.SBMotionScale);
+        motionScaleLabel = contentView.findViewById(R.id.TVMotionScaleLabel);
 
         toggleButtonPP = contentView.findViewById(R.id.ToggleButtonPP);
 
-        contentView.findViewById(R.id.BTSettings).setOnClickListener((v) -> {
+        ImageButton IBSettings = contentView.findViewById(R.id.BTSettings);
+
+        IBSettings.setOnClickListener((v) -> {
             if (!settingsOpened) {
                 settingsOpened = true;
                 LLSettings.setVisibility(View.VISIBLE);
+                IBSettings.setColorFilter(android.graphics.Color.BLUE);
             } else {
                 settingsOpened = false;
                 LLSettings.setVisibility(View.GONE);
+                IBSettings.clearColorFilter();
             }
         });
 
@@ -266,7 +271,7 @@ public class FrameGenerationView extends FrameLayout {
 
                 if (renderer != null && renderer.effectComposer != null) {
                     renderer.effectComposer.setFrameGenerationVariables(generationMode, fpsMultiplier,
-                            apiMode, usePostProcessing, blendModeAuto, blendScale);
+                            apiMode, usePostProcessing, blendModeAuto, motionScale);
                 }
 
                 SharedPreferences prefs = getContext().getSharedPreferences("frame_generation", Context.MODE_PRIVATE);
@@ -284,7 +289,7 @@ public class FrameGenerationView extends FrameLayout {
 
                 if (renderer != null && renderer.effectComposer != null) {
                     renderer.effectComposer.setFrameGenerationVariables(generationMode, fpsMultiplier,
-                            apiMode, usePostProcessing, blendModeAuto, blendScale);
+                            apiMode, usePostProcessing, blendModeAuto, motionScale);
                     setFpsMultiplier(fpsMultiplier);
                 }
 
@@ -299,19 +304,14 @@ public class FrameGenerationView extends FrameLayout {
         blendModeSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                if (position == 0) {
+                if (position == 0)
                     blendModeAuto = true;
-                    blendScaleSeekBar.setVisibility(View.GONE);
-                    blendScaleLabel.setText("Blend:");
-                } else {
+                 else
                     blendModeAuto = false;
-                    blendScaleSeekBar.setVisibility(View.VISIBLE);
-                    blendScaleLabel.setText(String.format("Blend: %.2f", blendScale));
-                }
 
                 if (renderer != null && renderer.effectComposer != null) {
                     renderer.effectComposer.setFrameGenerationVariables(generationMode, fpsMultiplier,
-                            apiMode, usePostProcessing, blendModeAuto, blendScale);
+                            apiMode, usePostProcessing, blendModeAuto, motionScale);
                     setBlendMode(blendModeAuto);
                 }
 
@@ -330,7 +330,7 @@ public class FrameGenerationView extends FrameLayout {
 
                 if (renderer != null && renderer.effectComposer != null) {
                     renderer.effectComposer.setFrameGenerationVariables(generationMode, fpsMultiplier,
-                            apiMode, usePostProcessing, blendModeAuto, blendScale);
+                            apiMode, usePostProcessing, blendModeAuto, motionScale);
                     setApiMode(apiMode);
                 }
 
@@ -342,17 +342,20 @@ public class FrameGenerationView extends FrameLayout {
             public void onNothingSelected(AdapterView<?> parent) {}
         });
 
-        blendScaleSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+        motionScaleSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 if (fromUser) {
-                    blendScale = progress / 50.0f;
+                    motionScale = progress / 100.0f;
 
-                    setBlendScale(blendScale);
-                    blendScaleLabel.setText(String.format("Blend: %.2f", blendScale));
+                    if (motionScale < 0.1f)
+                        motionScale = 0.1f;
+
+                    setMotionScale(motionScale);
+                    motionScaleLabel.setText(String.format(" %.2f", motionScale));
 
                     SharedPreferences prefs = getContext().getSharedPreferences("frame_generation", Context.MODE_PRIVATE);
-                    prefs.edit().putFloat("blend_scale", blendScale).apply();
+                    prefs.edit().putFloat("motion_scale", motionScale).apply();
                 }
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
@@ -378,10 +381,10 @@ public class FrameGenerationView extends FrameLayout {
         apiMode = prefs.getInt("api_mode", FrameGenerationEffect.API_QUALCOMM);
         usePostProcessing = prefs.getBoolean("use_post_processing", false);
         blendModeAuto = prefs.getBoolean("blend_mode_auto", true);
-        blendScale = prefs.getFloat("blend_scale", FrameGenerationEffect.DEFAULT_BLEND_SCALE);
+        motionScale = prefs.getFloat("motion_scale", FrameGenerationEffect.DEFAULT_MOTION_SCALE);
 
-        int progress = Math.round(blendScale * 50);
-        setBlendScale(blendScale);
+        int progress = Math.round(motionScale * 100);
+        setMotionScale(motionScale);
         setFpsMultiplier(fpsMultiplier);
         setBlendMode(blendModeAuto);
         setApiMode(apiMode);
@@ -396,15 +399,8 @@ public class FrameGenerationView extends FrameLayout {
         else
             blendModeSpinner.setSelection(1);
 
-        blendScaleSeekBar.setProgress(progress);
-
-        if (blendModeAuto) {
-            blendScaleSeekBar.setVisibility(View.GONE);
-            blendScaleLabel.setText("Blend:");
-        } else {
-            blendScaleSeekBar.setVisibility(View.VISIBLE);
-            blendScaleLabel.setText(String.format("Blend: %.2f", blendScale));
-        }
+        motionScaleSeekBar.setProgress(progress);
+        motionScaleLabel.setText(String.format(" %.2f", motionScale));
 
         toggleButtonPP.setChecked(usePostProcessing);
     }
@@ -439,12 +435,12 @@ public class FrameGenerationView extends FrameLayout {
         }
     }
 
-    private void setBlendScale(float blendScale) {
+    private void setMotionScale(float motionScale) {
         if (renderer != null && renderer.effectComposer != null) {
             FrameGenerationEffect effect =
                     (FrameGenerationEffect) renderer.effectComposer.getEffect(FrameGenerationEffect.class);
             if (effect != null) {
-                effect.setBlendScale(blendScale);
+                effect.setMotionScale(motionScale);
             }
         }
     }

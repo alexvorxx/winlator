@@ -396,10 +396,10 @@ public class ScreenEffectDialog extends ContentDialog {
                 int apiMode = prefs.getInt("api_mode", FrameGenerationEffect.API_QUALCOMM);
                 boolean usePostProcessing = prefs.getBoolean("use_post_processing", false);
                 boolean blendModeAuto = prefs.getBoolean("blend_mode_auto", true);
-                float blendScale = prefs.getFloat("blend_scale", FrameGenerationEffect.DEFAULT_BLEND_SCALE);
+                float motionScale = prefs.getFloat("motion_scale", FrameGenerationEffect.DEFAULT_MOTION_SCALE);
 
                 frameGenerationEffect = new FrameGenerationEffect(renderer, generationMode, fpsMultiplier, apiMode,
-                        usePostProcessing, blendModeAuto, blendScale);
+                        usePostProcessing, blendModeAuto, motionScale);
                 renderer.getEffectComposer().addEffect(frameGenerationEffect);
                 frameGenerationEffect.toggleGeneration();
                 frameGenerationEffect.setDisplayRefreshRate(getRefreshRate());

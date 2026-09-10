@@ -20,7 +20,6 @@ public class FrameGenerationEffect extends Effect {
     public static final int GENERATION_MODE_BALANCED = 1;
     public static final int GENERATION_MODE_QUALITY = 2;
 
-    public static final float DEFAULT_BLEND_SCALE = 1.00f;
     public static final float BLEND_FACTOR_X2 = 0.50f;
     public static final float BLEND_FACTOR_X3 = 0.33f;
     public static final float BLEND_FACTOR_X4 = 0.25f;
@@ -40,6 +39,8 @@ public class FrameGenerationEffect extends Effect {
     public static final int API_GLES20 = 0;
     public static final int API_QUALCOMM = 1;
 
+    public static final float DEFAULT_MOTION_SCALE = 0.50f;
+
     private static final long NANOS_PER_SECOND = 1_000_000_000L;
     private static final long NANOS_PER_MILLISECOND = 1_000_000L;
 
@@ -58,7 +59,7 @@ public class FrameGenerationEffect extends Effect {
     private boolean usePostProcessing;
     private boolean blendModeAuto;
     private float blendFactor;
-    private float blendScale;
+    private float motionScale = 0.5f;;
 
     private boolean hasFirstFrame = false;
     private boolean hasSecondFrame = false;
@@ -88,6 +89,7 @@ public class FrameGenerationEffect extends Effect {
     // Uniform locations
     public int uIsEnabledLoc = -1;
     private int uBlendFactorLoc = -1;
+    private int uMotionScaleLoc = -1;
     private int uTextureHistoryLoc = -1;
     private int uTexturePrevLoc = -1;
     private int uTextureCurrLoc = -1;
@@ -151,7 +153,7 @@ public class FrameGenerationEffect extends Effect {
     }
 
     public FrameGenerationEffect(GLRenderer renderer, int generationMode, int fpsMultiplier, int apiMode,
-                                 boolean enablePostProcessing, boolean blendModeAuto, float blendScale) {
+                                 boolean enablePostProcessing, boolean blendModeAuto, float motionScale) {
         super();
         this.renderer = renderer;
         this.generationMode = generationMode;
@@ -159,19 +161,17 @@ public class FrameGenerationEffect extends Effect {
         this.apiMode = apiMode;
         this.usePostProcessing = enablePostProcessing;
         this.blendModeAuto = blendModeAuto;
-        this.blendScale = blendScale;
+        this.motionScale = motionScale;
 
         updateFrameIntervals();
         calculateDisplayCounts();
         Log.d(TAG, "FrameGenerationEffect created with generationMode = " + generationMode +
                 " fpsMultiplier = " + fpsMultiplier + " apiMode = " + apiMode + " usePostProcessing" +
-                usePostProcessing + " blendModeAuto = " + blendModeAuto + " blendScale = " + blendScale);
+                usePostProcessing + " blendModeAuto = " + blendModeAuto + " motionScale = " + motionScale);
     }
 
-    /**
-     * Initializes QCOM extensions if present on the device.
-     * Must be called on the GL thread.
-     */
+    /* Initializes QCOM extensions if present on the device.
+     * Must be called on the GL thread. */
     private void initQCOMIfNeeded() {
         if (apiMode == API_GLES20) {
             Log.d(TAG, "GLES 2.0 initialized");
@@ -194,11 +194,9 @@ public class FrameGenerationEffect extends Effect {
         boolean qcomInitSuccess = nativeInitQCOM();
 
         if (motionEstSupported && qcomInitSuccess) {
-            // Check GLES3 for required formats
             String version = GLES20.glGetString(GLES20.GL_VERSION);
             if (version != null && version.contains("OpenGL ES 3.")) {
                 hasMotionEstimation = true;
-                // Query search block size
                 int[] blockSize = new int[2];
                 GLES20.glGetIntegerv(0x8C90, blockSize, 0); // MOTION_ESTIMATION_SEARCH_BLOCK_X_QCOM
                 GLES20.glGetIntegerv(0x8C91, blockSize, 1); // MOTION_ESTIMATION_SEARCH_BLOCK_Y_QCOM
@@ -235,10 +233,12 @@ public class FrameGenerationEffect extends Effect {
         }
     }
 
-    public void setBlendScale(float blendScale) {
-        if (this.blendScale != blendScale) {
-            this.blendScale = blendScale;
-            LogString("blendScale = " + blendScale);
+    public void setMotionScale(float motionScale) {
+        if (this.motionScale != motionScale) {
+            this.motionScale = motionScale;
+            if (motionScale < 0.1)
+                this.motionScale = 0.1f;
+            LogString("motionScale = " + motionScale);
         }
     }
 
@@ -604,6 +604,7 @@ public class FrameGenerationEffect extends Effect {
         if (uIsEnabledLoc == -1) {
             uIsEnabledLoc = GLES20.glGetUniformLocation(program, "uIsEnabled");
             uBlendFactorLoc = GLES20.glGetUniformLocation(program, "uBlendFactor");
+            uMotionScaleLoc = GLES20.glGetUniformLocation(program, "uMotionScale");
             uTextureHistoryLoc = GLES20.glGetUniformLocation(program, "uTextureHistory");
             uTexturePrevLoc = GLES20.glGetUniformLocation(program, "uTexturePrev");
             uTextureCurrLoc = GLES20.glGetUniformLocation(program, "uTextureCurr");
@@ -660,6 +661,7 @@ public class FrameGenerationEffect extends Effect {
         // Default flags
         GLES20.glUniform1i(uIsEnabledLoc, 0);
         GLES20.glUniform1f(uBlendFactorLoc, 0.0f);
+        GLES20.glUniform1f(uMotionScaleLoc, DEFAULT_MOTION_SCALE);
 
         if (uUseHardwareMotionLoc != -1)
             GLES20.glUniform1i(uUseHardwareMotionLoc, 0);
@@ -670,6 +672,7 @@ public class FrameGenerationEffect extends Effect {
             if (canShowGenerated) {
                 GLES20.glUniform1i(uIsEnabledLoc, 1);
                 GLES20.glUniform1f(uBlendFactorLoc, blendFactor);
+                GLES20.glUniform1f(uMotionScaleLoc, motionScale);
 
                 if (useHardwareMotion && uUseHardwareMotionLoc != -1) {
                     GLES20.glUniform1i(uUseHardwareMotionLoc, 1);
@@ -683,11 +686,13 @@ public class FrameGenerationEffect extends Effect {
                 LogString("Cannot show generated, showing REAL frame instead");
                 GLES20.glUniform1i(uIsEnabledLoc, 0);
                 GLES20.glUniform1f(uBlendFactorLoc, 0.0f);
+                GLES20.glUniform1f(uMotionScaleLoc, DEFAULT_MOTION_SCALE);
                 GLES20.glUniform1i(uUseHardwareMotionLoc, 0);
             }
         } else {
             GLES20.glUniform1i(uIsEnabledLoc, 0);
             GLES20.glUniform1f(uBlendFactorLoc, 0.0f);
+            GLES20.glUniform1f(uMotionScaleLoc, DEFAULT_MOTION_SCALE);
             GLES20.glUniform1i(uUseHardwareMotionLoc, 0);
             LogString(String.format("Showing REAL frame, resolution=%dx%d (sequence=%d, enabled=%b)",
                     currentWidth, currentHeight, currentSequence, isEnabled));
@@ -752,32 +757,32 @@ public class FrameGenerationEffect extends Effect {
 
     private void calculateBlendFactor() {
         if (fpsMultiplier == FPS_MULTIPLIER_X2) {
-            blendFactor = BLEND_FACTOR_X2 * blendScale;
+            blendFactor = BLEND_FACTOR_X2;
         } else {
             float frameFactor = (float) currentFrameDisplayCount / realFrameDisplayCount;
             if (fpsMultiplier == FPS_MULTIPLIER_X3) {
                 if (realFrameDisplayCount > 1) {
                     if (frameFactor <= 1.0)
-                        blendFactor = BLEND_FACTOR_X3 * blendScale;
+                        blendFactor = BLEND_FACTOR_X3;
                     else
-                        blendFactor = Math.min(1.0f, BLEND_FACTOR_X3 * blendScale * 2);
+                        blendFactor = Math.min(1.0f, BLEND_FACTOR_X3 * 2);
                 } else
-                    blendFactor = BLEND_FACTOR_X2 * blendScale;
+                    blendFactor = BLEND_FACTOR_X2;
             } else if (fpsMultiplier == FPS_MULTIPLIER_X4) {
                 if (realFrameDisplayCount > 2) {
                     if (frameFactor <= 1.0)
-                        blendFactor = BLEND_FACTOR_X4 * blendScale;
+                        blendFactor = BLEND_FACTOR_X4;
                     else if (frameFactor <= 2.0)
-                        blendFactor = BLEND_FACTOR_X4 * blendScale * 2;
+                        blendFactor = BLEND_FACTOR_X4 * 2;
                     else
-                        blendFactor = Math.min(1.0f, BLEND_FACTOR_X4 * blendScale * 3);
+                        blendFactor = Math.min(1.0f, BLEND_FACTOR_X4 * 3);
                 } else if (realFrameDisplayCount > 1) {
                     if (frameFactor <= 1.0)
-                        blendFactor = BLEND_FACTOR_X3 * blendScale;
+                        blendFactor = BLEND_FACTOR_X3;
                     else
-                        blendFactor = Math.min(1.0f, BLEND_FACTOR_X3 * blendScale * 2);
+                        blendFactor = Math.min(1.0f, BLEND_FACTOR_X3 * 2);
                 } else
-                    blendFactor = BLEND_FACTOR_X2 * blendScale;
+                    blendFactor = BLEND_FACTOR_X2;
             }
         }
         LogString("currentFrameDisplayCount = " + currentFrameDisplayCount +
@@ -812,9 +817,12 @@ public class FrameGenerationEffect extends Effect {
 
     private void ensureQCOMMotionTextures(int width, int height) {
         // Align by block — QCOM requires multiplicity
-        lumaWidth = (width / qcomSearchBlockX) * qcomSearchBlockX;
-        lumaHeight = (height / qcomSearchBlockY) * qcomSearchBlockY;
+        lumaWidth = (int)(width * motionScale / qcomSearchBlockX) * qcomSearchBlockX;
+        lumaHeight = (int)(height * motionScale / qcomSearchBlockY) * qcomSearchBlockY;
         if (lumaWidth <= 0 || lumaHeight <= 0) return;
+
+        if (lumaWidth < 8) lumaWidth = 8;
+        if (lumaHeight < 8) lumaHeight = 8;
 
         int motionWidth = lumaWidth / qcomSearchBlockX;
         int motionHeight = lumaHeight / qcomSearchBlockY;
@@ -1006,6 +1014,7 @@ public class FrameGenerationEffect extends Effect {
                     "uniform float uBlendFactor;",
                     "uniform vec2 resolution;",
                     "uniform int uUsePostProc;",
+                    "uniform float uMotionScale;",
                     "",
                     "void main() {",
                     "    if (uIsEnabled == 1) {",
@@ -1014,7 +1023,7 @@ public class FrameGenerationEffect extends Effect {
                     "        vec4 result;",
                     "        if (uUseHardwareMotion == 1) {",
                     "            vec2 motionPixels = texture2D(uMotionTexture, vUV).rg;",
-                    "            vec2 motionUV = motionPixels / resolution;",
+                    "            vec2 motionUV = motionPixels / resolution / uMotionScale;",
                     "            vec2 uvPrev = clamp(vUV - motionUV * uBlendFactor, 0.0, 1.0);",
                     "            vec2 uvCurr = clamp(vUV + motionUV * (1.0 - uBlendFactor), 0.0, 1.0);",
                     "            vec4 sampledPrev = texture2D(uTexturePrev, uvPrev);",
@@ -1056,11 +1065,12 @@ public class FrameGenerationEffect extends Effect {
                     "uniform float uBlendFactor;",
                     "uniform vec2 resolution;",
                     "uniform int uUsePostProc;",
+                    "uniform float uMotionScale;",
 
                     "vec2 fastMotionEstimate(vec2 uv) {",
                     "    if (uUseHardwareMotion == 1) {",
                     "        vec2 motionPixels = texture2D(uMotionTexture, uv).rg;",
-                    "        return motionPixels / resolution;",
+                    "        return motionPixels / resolution / uMotionScale;",
                     "    }",
                     "    vec2 texel = 1.0 / resolution;",
                     "    float minDiff = 1.0;",
@@ -1168,11 +1178,12 @@ public class FrameGenerationEffect extends Effect {
                     "uniform float uBlendFactor;",
                     "uniform vec2 resolution;",
                     "uniform int uUsePostProc;",
+                    "uniform float uMotionScale;",
 
                     "vec2 enhancedMotionEstimate(vec2 uv) {",
                     "    if (uUseHardwareMotion == 1) {",
                     "        vec2 motionPixels = texture2D(uMotionTexture, uv).rg;",
-                    "        return motionPixels / resolution;",
+                    "        return motionPixels / resolution / uMotionScale;",
                     "    }",
                     "    vec2 texel = 1.0 / resolution;",
                     "    float minDiff = 1.0;",
