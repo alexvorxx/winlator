@@ -552,7 +552,7 @@ E.g. <b>META</b> for <i>META key</i>, \n
     <string name="generation_mode" translatable="false">Mode:</string>
     <string name="fps_multiplier" translatable="false">Multiplier:</string>
     <string name="blend" translatable="false">Blending:</string>
-    <string name="api" translatable="false">API:</string>
+    <string name="api" translatable="false">Engine:</string>
     <string name="post_processing" translatable="false">Post-processing:</string>
     <string name="motion_scale" translatable="false">Motion force:</string>
 

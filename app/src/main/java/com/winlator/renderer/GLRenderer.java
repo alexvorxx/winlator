@@ -467,21 +467,4 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
         return effectComposer;
     }
 
-    private void renderWindowEffect(Drawable drawable, int x, int y, ShaderMaterial material) {
-        // Implement the rendering effect logic here
-        synchronized (drawable.renderLock) {
-            Texture texture = drawable.getTexture();
-            texture.updateFromDrawable(drawable);
-
-            XForm.set(tmpXForm1, x, y, drawable.width, drawable.height);
-            XForm.multiply(tmpXForm1, tmpXForm1, tmpXForm2);
-
-            GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture.getTextureId());
-            GLES20.glUniform1i(material.getUniformLocation("texture"), 0);
-            GLES20.glUniform1fv(material.getUniformLocation("xform"), tmpXForm1.length, tmpXForm1, 0);
-            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, quadVertices.count());
-            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
-        }
-    }
 }

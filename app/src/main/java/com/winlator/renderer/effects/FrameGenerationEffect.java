@@ -1,9 +1,11 @@
 package com.winlator.renderer.effects;
 
+import android.content.res.AssetManager;
 import android.opengl.GLES20;
 import android.opengl.GLES30;
 import android.util.Log;
 
+import com.winlator.renderer.DIS;
 import com.winlator.renderer.EffectComposer;
 import com.winlator.renderer.GLRenderer;
 import com.winlator.renderer.material.ScreenMaterial;
@@ -36,7 +38,7 @@ public class FrameGenerationEffect extends Effect {
     public static final int FPS_45 = 45;
     public static final int FPS_60 = 60;
 
-    public static final int API_GLES20 = 0;
+    public static final int API_DIS = 0;
     public static final int API_QUALCOMM = 1;
 
     public static final float DEFAULT_MOTION_SCALE = 0.50f;
@@ -59,7 +61,7 @@ public class FrameGenerationEffect extends Effect {
     private boolean usePostProcessing;
     private boolean blendModeAuto;
     private float blendFactor;
-    private float motionScale = 0.5f;;
+    private float motionScale = 0.5f;
 
     private boolean hasFirstFrame = false;
     private boolean hasSecondFrame = false;
@@ -86,6 +88,10 @@ public class FrameGenerationEffect extends Effect {
     private int lumaWidth = 0;
     private int lumaHeight = 0;
 
+    // DIS Vulkan
+    private boolean disVulkanReady = false;
+    private DIS disVulkan = null;
+
     // Uniform locations
     public int uIsEnabledLoc = -1;
     private int uBlendFactorLoc = -1;
@@ -99,6 +105,7 @@ public class FrameGenerationEffect extends Effect {
     // Uniform locations for hardware paths
     private int uMotionTextureLoc = -1;
     private int uUseHardwareMotionLoc = -1;
+    private int uUseDISLoc = -1;
 
     // Textures
     private int textureHistory = -1;
@@ -173,8 +180,16 @@ public class FrameGenerationEffect extends Effect {
     /* Initializes QCOM extensions if present on the device.
      * Must be called on the GL thread. */
     private void initQCOMIfNeeded() {
-        if (apiMode == API_GLES20) {
-            Log.d(TAG, "GLES 2.0 initialized");
+        if (apiMode == API_DIS) {
+            disVulkan = new DIS();
+            AssetManager mgr = renderer.xServerView.getContext().getAssets();
+            disVulkanReady = disVulkan.init(mgr);
+            // Set quality preset
+            switch (generationMode) {
+                case GENERATION_MODE_FAST:     disVulkan.setPreset(DIS.PRESET_FAST_MIN_SIDE);     break;
+                case GENERATION_MODE_BALANCED: disVulkan.setPreset(DIS.PRESET_BALANCED_MIN_SIDE); break;
+                case GENERATION_MODE_QUALITY:  disVulkan.setPreset(DIS.PRESET_QUALITY_MIN_SIDE);  break;
+            }
             return;
         }
 
@@ -490,28 +505,49 @@ public class FrameGenerationEffect extends Effect {
                     }
                 }
 
-                int newTextureId = captureCurrentFrameSimple(width, height);
-                if (newTextureId == -1) return;
+                if (disVulkanReady) {
+                    disVulkan.ensureTextures(width, height);
 
-                if (!hasFirstFrame) {
-                    textureCurr = newTextureId;
-                    hasFirstFrame = true;
-                    waitingForSecondFrame = true;
-                    LogString("Captured first real frame");
-                } else if (waitingForSecondFrame) {
-                    texturePrev = textureCurr;
-                    textureCurr = newTextureId;
-                    hasSecondFrame = true;
-                    waitingForSecondFrame = false;
-                    LogString("Captured second real frame, ready for generation");
-                } else {
-                    if (capturedRealFrame != -1) {
-                        GLES20.glDeleteTextures(1, new int[]{capturedRealFrame}, 0);
+                    if (!hasFirstFrame) {
+                        disVulkan.copyFrameToPrev();
+                        GLES20.glFinish();
+                        texturePrev = disVulkan.getPrevGlTexture();
+                        textureCurr = disVulkan.getCurrGlTexture();
+                        hasFirstFrame = true;
+                        waitingForSecondFrame = true;
+                    } else if (waitingForSecondFrame) {
+                        disVulkan.copyFrameToCurr();
+                        texturePrev = disVulkan.getPrevGlTexture();
+                        textureCurr = disVulkan.getCurrGlTexture();
+                        hasSecondFrame = true;
+                        waitingForSecondFrame = false;
+                    } else {
+                        disVulkan.swapPrevCurr();
+                        disVulkan.copyFrameToCurr();
+                        texturePrev = disVulkan.getPrevGlTexture();
+                        textureCurr = disVulkan.getCurrGlTexture();
                     }
-                    capturedRealFrame = newTextureId;
-                    hasCapturedFrame = true;
-                    skipFirstRealDisplay = true;
-                    LogString("Captured real frame for NEXT cycle (delayed display)");
+                } else {
+                    int newTextureId = captureCurrentFrameSimple(width, height);
+                    if (newTextureId == -1) return;
+
+                    if (!hasFirstFrame) {
+                        textureCurr = newTextureId;
+                        hasFirstFrame = true;
+                        waitingForSecondFrame = true;
+                    } else if (waitingForSecondFrame) {
+                        texturePrev = textureCurr;
+                        textureCurr = newTextureId;
+                        hasSecondFrame = true;
+                        waitingForSecondFrame = false;
+                    } else {
+                        if (capturedRealFrame != -1) {
+                            GLES20.glDeleteTextures(1, new int[]{capturedRealFrame}, 0);
+                        }
+                        capturedRealFrame = newTextureId;
+                        hasCapturedFrame = true;
+                        skipFirstRealDisplay = true;
+                    }
                 }
 
                 lastRealFrameTimeNs = currentTimeNs;
@@ -540,7 +576,25 @@ public class FrameGenerationEffect extends Effect {
                 // Hardware path selection
                 useHardwareMotion = false;
 
-                if (hasMotionEstimation) {
+                if (disVulkanReady && hasFirstFrame && hasSecondFrame) {
+                    GLES20.glFinish();
+                    /*boolean ok = disVulkan.computeFlow();
+                    if (ok) {
+                        useHardwareMotion = true;
+                        qcomMotionTexture = disVulkan.getFlowGlTexture();
+                    } else {
+                        useHardwareMotion = false;
+                    }*/
+                    if (disVulkanReady) {
+                        disVulkan.setDebugStage(DIS.DBG_OFF); // ← выберите нужный этап
+                        GLES20.glFinish();
+                        disVulkan.computeFlow();
+                        GLES20.glFinish();
+                        //disVulkan.debugReadFlowCenterPixel();
+                        useHardwareMotion = true;
+                        qcomMotionTexture = disVulkan.getFlowGlTexture();
+                    }
+                } else if (hasMotionEstimation && !disVulkanReady) {
                     ensureQCOMMotionTextures(width, height);
                     if (qcomRefLuminanceTexture != -1 && qcomTargetLuminanceTexture != -1 &&
                             qcomMotionTexture != -1) {
@@ -612,6 +666,7 @@ public class FrameGenerationEffect extends Effect {
             uUsePostProc = GLES20.glGetUniformLocation(program, "uUsePostProc");
             uMotionTextureLoc = GLES20.glGetUniformLocation(program, "uMotionTexture");
             uUseHardwareMotionLoc = GLES20.glGetUniformLocation(program, "uUseHardwareMotion");
+            uUseDISLoc = GLES20.glGetUniformLocation(program, "uUseDIS");
         }
 
         // Bind prev texture to unit 1
@@ -641,15 +696,25 @@ public class FrameGenerationEffect extends Effect {
         }
         GLES20.glUniform1i(uTextureHistoryLoc, 3);
 
-        // Bind motion texture if available (unit 4)
-        GLES20.glActiveTexture(GLES20.GL_TEXTURE4);
-        if (useHardwareMotion && qcomMotionTexture != -1) {
-            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, qcomMotionTexture);
-        } else {
-            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
-        }
-        if (uMotionTextureLoc != -1)
+        GLES20.glUniform1i(uUseDISLoc, 0);
+
+        // Use flowGlTex as motion texture when DIS Vulkan is active
+        if (disVulkanReady && useHardwareMotion) {
+            GLES20.glActiveTexture(GLES20.GL_TEXTURE4);
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, disVulkan.getFlowGlTexture());
             GLES20.glUniform1i(uMotionTextureLoc, 4);
+            GLES20.glUniform1i(uUseHardwareMotionLoc, 1);
+            GLES20.glUniform1i(uUseDISLoc, 1);
+        } else {// Bind motion texture if available (unit 4)
+            GLES20.glActiveTexture(GLES20.GL_TEXTURE4);
+            if (useHardwareMotion && qcomMotionTexture != -1) {
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, qcomMotionTexture);
+            } else {
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+            }
+            if (uMotionTextureLoc != -1)
+                GLES20.glUniform1i(uMotionTextureLoc, 4);
+        }
 
         if (uResolutionLoc != -1 && currentWidth > 0 && currentHeight > 0) {
             GLES20.glUniform2f(uResolutionLoc, currentWidth, currentHeight);
@@ -704,6 +769,11 @@ public class FrameGenerationEffect extends Effect {
     public void cleanup() {
         clearHistory();
         deleteQCOMResources();
+
+        if (disVulkan != null) {
+            disVulkan.cleanup();
+            disVulkan = null;
+        }
         LogString("Effect cleaned up");
     }
 
@@ -996,6 +1066,36 @@ public class FrameGenerationEffect extends Effect {
         }
     }
 
+    private static final String FRAGMENT_SHADER_HEADER = String.join("\n", new CharSequence[]{
+            "precision mediump float;",
+            "varying vec2 vUV;",
+            "uniform sampler2D uTextureHistory;",
+            "uniform sampler2D uTexturePrev;",
+            "uniform sampler2D uTextureCurr;",
+            "uniform sampler2D uMotionTexture;",
+            "uniform int uIsEnabled;",
+            "uniform int uUseHardwareMotion;",
+            "uniform int uUseDIS;",
+            "uniform float uBlendFactor;",
+            "uniform vec2 resolution;",
+            "uniform int uUsePostProc;",
+            "uniform float uMotionScale;",
+
+            "vec4 visualizeMotion() {",
+            "    return texture2D(uMotionTexture, vUV);",
+            "    vec2 mv = texture2D(uMotionTexture, vUV).rg;",
+            "    float len = length(mv);",
+            "    if (len < 0.001) {",
+            "        return vec4(0.0, 0.0, 0.0, 1.0);",
+            "    } else {",
+            "        float r = clamp(-mv.x / 1.0, 0.0, 1.0);",
+            "        float g = clamp(mv.x / 1.0, 0.0, 1.0);",
+            "        float b = clamp(-mv.y / 1.0, 0.0, 1.0);",
+            "        return vec4(r, g, b, 1.0);",
+            "    }",
+            "}",
+    } );
+
     private static class FastFrameGenerationMaterial extends ScreenMaterial {
         public FastFrameGenerationMaterial() {
             super();
@@ -1004,18 +1104,7 @@ public class FrameGenerationEffect extends Effect {
         @Override
         protected String getFragmentShader() {
             return String.join("\n", new CharSequence[]{
-                    "precision mediump float;",
-                    "varying vec2 vUV;",
-                    "uniform sampler2D uTexturePrev;",
-                    "uniform sampler2D uTextureCurr;",
-                    "uniform sampler2D uMotionTexture;",
-                    "uniform int uIsEnabled;",
-                    "uniform int uUseHardwareMotion;",
-                    "uniform float uBlendFactor;",
-                    "uniform vec2 resolution;",
-                    "uniform int uUsePostProc;",
-                    "uniform float uMotionScale;",
-                    "",
+                    FRAGMENT_SHADER_HEADER,
                     "void main() {",
                     "    if (uIsEnabled == 1) {",
                     "        vec4 prev = texture2D(uTexturePrev, vUV);",
@@ -1023,7 +1112,12 @@ public class FrameGenerationEffect extends Effect {
                     "        vec4 result;",
                     "        if (uUseHardwareMotion == 1) {",
                     "            vec2 motionPixels = texture2D(uMotionTexture, vUV).rg;",
-                    "            vec2 motionUV = motionPixels / resolution / uMotionScale;",
+                    "            vec2 motionUV;",
+                    "            if (uUseDIS == 1) {",
+                    "                motionUV = motionPixels / uMotionScale / 2.0;",
+                    "            } else {",
+                    "                motionUV = motionPixels / resolution / uMotionScale;",
+                    "            }",
                     "            vec2 uvPrev = clamp(vUV - motionUV * uBlendFactor, 0.0, 1.0);",
                     "            vec2 uvCurr = clamp(vUV + motionUV * (1.0 - uBlendFactor), 0.0, 1.0);",
                     "            vec4 sampledPrev = texture2D(uTexturePrev, uvPrev);",
@@ -1054,23 +1148,15 @@ public class FrameGenerationEffect extends Effect {
         @Override
         protected String getFragmentShader() {
             return String.join("\n", new CharSequence[]{
-                    "precision mediump float;",
-                    "varying vec2 vUV;",
-                    "uniform sampler2D uTextureHistory;",
-                    "uniform sampler2D uTexturePrev;",
-                    "uniform sampler2D uTextureCurr;",
-                    "uniform sampler2D uMotionTexture;",
-                    "uniform int uIsEnabled;",
-                    "uniform int uUseHardwareMotion;",
-                    "uniform float uBlendFactor;",
-                    "uniform vec2 resolution;",
-                    "uniform int uUsePostProc;",
-                    "uniform float uMotionScale;",
-
+                    FRAGMENT_SHADER_HEADER,
                     "vec2 fastMotionEstimate(vec2 uv) {",
                     "    if (uUseHardwareMotion == 1) {",
                     "        vec2 motionPixels = texture2D(uMotionTexture, uv).rg;",
-                    "        return motionPixels / resolution / uMotionScale;",
+                    "        if (uUseDIS == 1) {",
+                    "            return motionPixels / uMotionScale / 2.0;",
+                    "        } else {",
+                    "            return motionPixels / resolution / uMotionScale;",
+                    "        }",
                     "    }",
                     "    vec2 texel = 1.0 / resolution;",
                     "    float minDiff = 1.0;",
@@ -1167,23 +1253,15 @@ public class FrameGenerationEffect extends Effect {
         @Override
         protected String getFragmentShader() {
             return String.join("\n", new CharSequence[]{
-                    "precision mediump float;",
-                    "varying vec2 vUV;",
-                    "uniform sampler2D uTextureHistory;",
-                    "uniform sampler2D uTexturePrev;",
-                    "uniform sampler2D uTextureCurr;",
-                    "uniform sampler2D uMotionTexture;",
-                    "uniform int uIsEnabled;",
-                    "uniform int uUseHardwareMotion;",
-                    "uniform float uBlendFactor;",
-                    "uniform vec2 resolution;",
-                    "uniform int uUsePostProc;",
-                    "uniform float uMotionScale;",
-
+                    FRAGMENT_SHADER_HEADER,
                     "vec2 enhancedMotionEstimate(vec2 uv) {",
                     "    if (uUseHardwareMotion == 1) {",
                     "        vec2 motionPixels = texture2D(uMotionTexture, uv).rg;",
-                    "        return motionPixels / resolution / uMotionScale;",
+                    "        if (uUseDIS == 1) {",
+                    "            return motionPixels / uMotionScale / 2.0;",
+                    "        } else {",
+                    "            return motionPixels / resolution / uMotionScale;",
+                    "        }",
                     "    }",
                     "    vec2 texel = 1.0 / resolution;",
                     "    float minDiff = 1.0;",

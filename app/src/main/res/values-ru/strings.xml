@@ -521,6 +521,7 @@
     <string name="generation_mode">Режим:</string>
     <string name="fps_multiplier">Множитель:</string>
     <string name="blend">Смешение:</string>
+    <string name="api" translatable="false">Движок:</string>
     <string name="post_processing">Пост-обработка:</string>
     <string name="motion_scale">Сила движения:</string>
 

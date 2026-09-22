@@ -87,12 +87,12 @@ public class FrameGenerationView extends FrameLayout {
     };
 
     private static final int[] API_MODE_VALUES = {
-            FrameGenerationEffect.API_GLES20,
+            FrameGenerationEffect.API_DIS,
             FrameGenerationEffect.API_QUALCOMM
     };
 
     private static final String[] API_MODE_OPTIONS = {
-            "GLES 2.0", "Qualcomm"
+            "DIS", "QCOM"
     };
 
     private int initialFPS;
