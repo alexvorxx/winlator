@@ -554,7 +554,7 @@ E.g. <b>META</b> for <i>META key</i>, \n
     <string name="blend" translatable="false">Blending:</string>
     <string name="api" translatable="false">Engine:</string>
     <string name="post_processing" translatable="false">Post-processing:</string>
-    <string name="motion_scale" translatable="false">Motion force:</string>
+    <string name="motion_scale" translatable="false">Motion scale:</string>
 
     <string name="install_drivers" translatable="false">Install Drivers</string>
     <string name="install_drivers_message" translatable="false">You will now be prompted to pick a driver. These must be the same ones used in other emulators like Yuzu, Dolphin, Citra, etc.</string>

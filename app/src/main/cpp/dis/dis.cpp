@@ -547,7 +547,7 @@ bool disVulkanCreateAhbTexture(DisVulkanContext* ctx, AhbTexture* tex,
     imgInfo.tiling      = VK_IMAGE_TILING_OPTIMAL;
     imgInfo.usage       = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
     imgInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    imgInfo.initialLayout = VK_IMAGE_LAYOUT_GENERAL;  // было UNDEFINED
+    imgInfo.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
 
     if (vkCreateImage(ctx->device, &imgInfo, nullptr, &tex->vkImage) != VK_SUCCESS) {
         LOGE("vkCreateImage (AHB) failed");
@@ -876,7 +876,7 @@ static void transitionImage(VkCommandBuffer cmd, VkImage img,
     vkCmdPipelineBarrier(cmd, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &b);
 }
 
-// Копирует выбранную внутреннюю текстуру в flowAhb, чтобы GLES мог её показать.
+// Copy the selected internal texture in flowAhb so that GLES can display it.
 static bool disDebugCopyStage(DisVulkanContext* ctx,
                               AhbTexture* flowAhb,
                               VkImageView srcView,
@@ -1183,8 +1183,7 @@ bool disVulkanComputeFlow(DisVulkanContext* ctx,
     begInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     vkBeginCommandBuffer(cmd, &begInfo);
 
-    // Хелпер: если debugStage совпадает с заданным — копируем указанную текстуру
-    // в flowAhb и прерываем конвейер.
+    // Helper: if debugStage matches with specified - copy texture in flowAhb and stop.
     auto debugCheck = [&](int stage, VkImageView view, int w, int h,
                           int mode, float scale) -> bool {
         if (ctx->debugStage != stage) return false;
@@ -1207,7 +1206,7 @@ bool disVulkanComputeFlow(DisVulkanContext* ctx,
     // prev/curr: GENERAL→GENERAL (memory barrier only, preserves GLES-written content)
     // flow: UNDEFINED→GENERAL first time, GENERAL→GENERAL after
 
-    // ── AHB acquires: гарантируем видимость записей GLES/EGL для compute ──
+    // ── AHB acquires: guarantee the visibility of GLES/EGL records for compute ──
     auto acquireAhb = [&](VkImage img) {
         VkImageMemoryBarrier b = {};
         b.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -1228,7 +1227,6 @@ bool disVulkanComputeFlow(DisVulkanContext* ctx,
     };
     acquireAhb(prevAhb->vkImage);
     acquireAhb(currAhb->vkImage);
-// flowAhb — только для записи, acquire не нужен, достаточно release после записи
 
     // ── Transition all internal images to GENERAL ──
     transitionImage(cmd, ctx->colorPrevDown.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
@@ -1287,7 +1285,7 @@ bool disVulkanComputeFlow(DisVulkanContext* ctx,
     computeBarrier(cmd);
     if (debugCheck(DIS_DEBUG_LUMA_CURR, ctx->lumaCurr[0].view, lw[0], lh[0], 0, 1.0f)) return true;
 
-    // 4-6: Downscale luma prev (уровни 1..3)
+    // 4-6: Downscale luma prev (levels 1..3)
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, ctx->pipeDownscaleR32);
     for (int i = 1; i < DIS_PYRAMID_LEVELS; i++) {
         vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, ctx->plMain, 0, 1, &ctx->dsMain[dsIdx++], 0, nullptr);
@@ -1425,7 +1423,7 @@ bool disVulkanComputeFlow(DisVulkanContext* ctx,
 
     // ── Transition flow AHB to SHADER_READ_ONLY for GLES ──
 
-    // ── Release flowAhb: сделать записи compute видимыми для внешних потребителей (GLES) ──
+    // ── Release flowAhb: make compute records visible for GLES ──
     {
         VkImageMemoryBarrier b = {};
         b.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;

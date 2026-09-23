@@ -250,7 +250,8 @@ public class MainActivity extends AppCompatActivity implements NavigationView.On
                 "linux-fg (<a href=\"https://github.com/xXJSONDeruloXx/linux-fg\">github.com/xXJSONDeruloXx/linux-fg</a>)",
                 "vkBasalt (<a href=\"https://github.com/DadSchoorse/vkBasalt\">github.com/DadSchoorse/vkBasalt</a>)",
                 "Original Winlator(<a href=\"https://github.com/brunodev85/winlator\">github.com/brunodev85/winlator</a>)",
-                "Winlator Bionic (<a href=\"https://github.com/Pipetto-crypto/winlator/tree/winlator_bionic\">github.com/Pipetto-crypto/winlator</a>)"
+                "Winlator Bionic (<a href=\"https://github.com/Pipetto-crypto/winlator/tree/winlator_bionic\">github.com/Pipetto-crypto/winlator</a>)",
+                "WinNative (<a href=\"https://github.com/qwertypower/WinNative\">github.com/qwertypower/WinNative</a>)"
             );
 
             TextView tvCreditsAndThirdPartyApps = dialog.findViewById(R.id.TVCreditsAndThirdPartyApps);

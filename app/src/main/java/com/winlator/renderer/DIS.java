@@ -4,9 +4,6 @@ import android.content.res.AssetManager;
 import android.opengl.GLES20;
 import android.util.Log;
 
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-
 public class DIS {
     private static final String TAG = "DisVulkan";
 
@@ -15,7 +12,7 @@ public class DIS {
     public static final int FMT_RGBA16F   = 1;
 
     // Quality presets: minimum side for DIS resolution
-    public static final int PRESET_FAST_MIN_SIDE     = 126;
+    public static final int PRESET_FAST_MIN_SIDE     = 128;
     public static final int PRESET_BALANCED_MIN_SIDE = 180;
     public static final int PRESET_QUALITY_MIN_SIDE = 252;
 

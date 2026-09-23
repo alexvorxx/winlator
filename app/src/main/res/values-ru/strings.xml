@@ -523,7 +523,7 @@
     <string name="blend">Смешение:</string>
     <string name="api" translatable="false">Движок:</string>
     <string name="post_processing">Пост-обработка:</string>
-    <string name="motion_scale">Сила движения:</string>
+    <string name="motion_scale">Шкала движения:</string>
 
     <string name="install_drivers">Установить драйвер</string>
     <string name="install_drivers_message">Сейчас Вам будет предложено выбрать драйвер. Он должен быть таким же, как и в других эмуляторах (Yuzu, Dolphin, Citra, и т.д.).</string>

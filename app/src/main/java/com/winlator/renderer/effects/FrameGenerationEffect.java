@@ -578,19 +578,11 @@ public class FrameGenerationEffect extends Effect {
 
                 if (disVulkanReady && hasFirstFrame && hasSecondFrame) {
                     GLES20.glFinish();
-                    /*boolean ok = disVulkan.computeFlow();
-                    if (ok) {
-                        useHardwareMotion = true;
-                        qcomMotionTexture = disVulkan.getFlowGlTexture();
-                    } else {
-                        useHardwareMotion = false;
-                    }*/
                     if (disVulkanReady) {
-                        disVulkan.setDebugStage(DIS.DBG_OFF); // ← выберите нужный этап
+                        disVulkan.setDebugStage(DIS.DBG_OFF);
                         GLES20.glFinish();
                         disVulkan.computeFlow();
                         GLES20.glFinish();
-                        //disVulkan.debugReadFlowCenterPixel();
                         useHardwareMotion = true;
                         qcomMotionTexture = disVulkan.getFlowGlTexture();
                     }
@@ -1080,6 +1072,7 @@ public class FrameGenerationEffect extends Effect {
             "uniform vec2 resolution;",
             "uniform int uUsePostProc;",
             "uniform float uMotionScale;",
+            "#define DIS_MOTION_FACTOR 2.0",
 
             "vec4 visualizeMotion() {",
             "    return texture2D(uMotionTexture, vUV);",
@@ -1114,7 +1107,7 @@ public class FrameGenerationEffect extends Effect {
                     "            vec2 motionPixels = texture2D(uMotionTexture, vUV).rg;",
                     "            vec2 motionUV;",
                     "            if (uUseDIS == 1) {",
-                    "                motionUV = motionPixels / uMotionScale / 2.0;",
+                    "                motionUV = motionPixels / uMotionScale / DIS_MOTION_FACTOR;",
                     "            } else {",
                     "                motionUV = motionPixels / resolution / uMotionScale;",
                     "            }",
@@ -1153,7 +1146,7 @@ public class FrameGenerationEffect extends Effect {
                     "    if (uUseHardwareMotion == 1) {",
                     "        vec2 motionPixels = texture2D(uMotionTexture, uv).rg;",
                     "        if (uUseDIS == 1) {",
-                    "            return motionPixels / uMotionScale / 2.0;",
+                    "            return motionPixels / uMotionScale / DIS_MOTION_FACTOR;",
                     "        } else {",
                     "            return motionPixels / resolution / uMotionScale;",
                     "        }",
@@ -1258,7 +1251,7 @@ public class FrameGenerationEffect extends Effect {
                     "    if (uUseHardwareMotion == 1) {",
                     "        vec2 motionPixels = texture2D(uMotionTexture, uv).rg;",
                     "        if (uUseDIS == 1) {",
-                    "            return motionPixels / uMotionScale / 2.0;",
+                    "            return motionPixels / uMotionScale / DIS_MOTION_FACTOR;",
                     "        } else {",
                     "            return motionPixels / resolution / uMotionScale;",
                     "        }",
