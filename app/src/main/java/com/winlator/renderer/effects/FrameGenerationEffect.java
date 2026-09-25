@@ -1214,8 +1214,8 @@ public class FrameGenerationEffect extends Effect {
         protected String getFragmentShader() {
             return String.join("\n", new CharSequence[]{
                     FRAGMENT_SHADER_HEADER,
-                    "#define MOTION_THRESHOLD 0.010",
-                    "#define GOOD_MATCH 0.10",
+                    "#define MOTION_THRESHOLD 0.020",
+                    "#define GOOD_MATCH 0.20",
                     "#define SEARCH_LIMIT 48.0",
                     "#define STEP_PIXELS 6.0",
                     "#define SEARCH_STEPS 8",
