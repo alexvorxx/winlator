@@ -40,6 +40,7 @@ public class FrameGenerationEffect extends Effect {
 
     public static final int API_DIS = 0;
     public static final int API_QUALCOMM = 1;
+    public static final int API_GLES = 2;
 
     public static final float DEFAULT_MOTION_SCALE = 0.50f;
 
@@ -62,6 +63,7 @@ public class FrameGenerationEffect extends Effect {
     private boolean blendModeAuto;
     private float blendFactor;
     private float motionScale = 0.5f;
+    private boolean useMotionEstimation = false;
 
     private boolean hasFirstFrame = false;
     private boolean hasSecondFrame = false;
@@ -75,8 +77,7 @@ public class FrameGenerationEffect extends Effect {
 
     // QCOM fields
     private boolean qcomInitialized = false;
-    private boolean hasMotionEstimation = false;
-    private boolean useHardwareMotion = false;
+    private boolean hasQcomMotionEstimation = false;
 
     private int qcomRefLuminanceFBO = -1;
     private int qcomTargetLuminanceFBO = -1;
@@ -102,9 +103,9 @@ public class FrameGenerationEffect extends Effect {
     private int uResolutionLoc = -1;
     private int uUsePostProc = -1;
 
-    // Uniform locations for hardware paths
+    // Uniform locations for Motion Estimation
+    private int uUseMotionEstimationLoc = -1;
     private int uMotionTextureLoc = -1;
-    private int uUseHardwareMotionLoc = -1;
     private int uUseDISLoc = -1;
 
     // Textures
@@ -177,25 +178,30 @@ public class FrameGenerationEffect extends Effect {
                 usePostProcessing + " blendModeAuto = " + blendModeAuto + " motionScale = " + motionScale);
     }
 
-    /* Initializes QCOM extensions if present on the device.
-     * Must be called on the GL thread. */
+    /* Initializes QCOM extensions if present on the device. Must be called on the GL thread. */
     private void initQCOMIfNeeded() {
+        if (apiMode == API_GLES) {
+            Log.d(TAG, "Selected GLES 2.0");
+            return;
+        }
+
         if (apiMode == API_DIS) {
             disVulkan = new DIS();
             AssetManager mgr = renderer.xServerView.getContext().getAssets();
             disVulkanReady = disVulkan.init(mgr);
-            // Set quality preset
+
             switch (generationMode) {
                 case GENERATION_MODE_FAST:     disVulkan.setPreset(DIS.PRESET_FAST_MIN_SIDE);     break;
                 case GENERATION_MODE_BALANCED: disVulkan.setPreset(DIS.PRESET_BALANCED_MIN_SIDE); break;
                 case GENERATION_MODE_QUALITY:  disVulkan.setPreset(DIS.PRESET_QUALITY_MIN_SIDE);  break;
             }
+            Log.d(TAG, "Selected DIS");
             return;
         }
 
         String extensions = GLES20.glGetString(GLES20.GL_EXTENSIONS);
         if (extensions == null) {
-            Log.d(TAG, "GL_EXTENSIONS returned null, cannot check QCOM support");
+            Log.d(TAG, "GL_EXTENSIONS returned null, cannot check QCOM support, fallback to GLES 2.0");
             return;
         }
 
@@ -211,7 +217,7 @@ public class FrameGenerationEffect extends Effect {
         if (motionEstSupported && qcomInitSuccess) {
             String version = GLES20.glGetString(GLES20.GL_VERSION);
             if (version != null && version.contains("OpenGL ES 3.")) {
-                hasMotionEstimation = true;
+                hasQcomMotionEstimation = true;
                 int[] blockSize = new int[2];
                 GLES20.glGetIntegerv(0x8C90, blockSize, 0); // MOTION_ESTIMATION_SEARCH_BLOCK_X_QCOM
                 GLES20.glGetIntegerv(0x8C91, blockSize, 1); // MOTION_ESTIMATION_SEARCH_BLOCK_Y_QCOM
@@ -312,7 +318,7 @@ public class FrameGenerationEffect extends Effect {
             currentRealFrameCaptured = false;
             currentRealFrameIndex = 0;
         } else {
-            useHardwareMotion = false;
+            useMotionEstimation = false;
         }
     }
 
@@ -573,8 +579,7 @@ public class FrameGenerationEffect extends Effect {
 
                 lastAnyFrameShownTimeNs = currentTimeNs;
 
-                // Hardware path selection
-                useHardwareMotion = false;
+                useMotionEstimation = false;
 
                 if (disVulkanReady && hasFirstFrame && hasSecondFrame) {
                     GLES20.glFinish();
@@ -583,10 +588,10 @@ public class FrameGenerationEffect extends Effect {
                         GLES20.glFinish();
                         disVulkan.computeFlow();
                         GLES20.glFinish();
-                        useHardwareMotion = true;
+                        useMotionEstimation = true;
                         qcomMotionTexture = disVulkan.getFlowGlTexture();
                     }
-                } else if (hasMotionEstimation && !disVulkanReady) {
+                } else if (hasQcomMotionEstimation && !disVulkanReady) {
                     ensureQCOMMotionTextures(width, height);
                     if (qcomRefLuminanceTexture != -1 && qcomTargetLuminanceTexture != -1 &&
                             qcomMotionTexture != -1) {
@@ -612,11 +617,11 @@ public class FrameGenerationEffect extends Effect {
                         int err = GLES20.glGetError();
                         if (err != GLES20.GL_NO_ERROR) {
                             Log.e(TAG, "nativeTexEstimateMotionQCOM error: 0x" + Integer.toHexString(err));
-                            useHardwareMotion = false;
+                            useMotionEstimation = false;
                         } else {
                             GLES20.glFinish();
-                            useHardwareMotion = true;
-                            LogString("Hardware motion estimation OK");
+                            useMotionEstimation = true;
+                            LogString("QCOM motion estimation OK");
                         }
 
                         // After copyTextureToR8 and glFinish:
@@ -626,16 +631,16 @@ public class FrameGenerationEffect extends Effect {
                         //Log.d(TAG, "REF_LUMA via dedicated FBO: " + (buf.get(0) & 0xFF));
                         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
 
-                        useHardwareMotion = true;
-                        LogString("Using hardware motion estimation");
+                        useMotionEstimation = true;
+                        LogString("Using QCOM motion estimation");
                     }
                 }
 
                 LogString(String.format("Generated: prev=%d, curr=%d, blend=%.3f (time since real: %.2fms), hwMotion=%b",
-                        texturePrev, textureCurr, blendFactor, timeSinceRealFrameNs / (double)NANOS_PER_MILLISECOND, useHardwareMotion));
+                        texturePrev, textureCurr, blendFactor, timeSinceRealFrameNs / (double)NANOS_PER_MILLISECOND, useMotionEstimation));
             } else {
                 LogString("Not enough frames for generation yet");
-                useHardwareMotion = false;
+                useMotionEstimation = false;
             }
         }
     }
@@ -657,7 +662,7 @@ public class FrameGenerationEffect extends Effect {
             uResolutionLoc = GLES20.glGetUniformLocation(program, "resolution");
             uUsePostProc = GLES20.glGetUniformLocation(program, "uUsePostProc");
             uMotionTextureLoc = GLES20.glGetUniformLocation(program, "uMotionTexture");
-            uUseHardwareMotionLoc = GLES20.glGetUniformLocation(program, "uUseHardwareMotion");
+            uUseMotionEstimationLoc = GLES20.glGetUniformLocation(program, "uUseMotionEstimation");
             uUseDISLoc = GLES20.glGetUniformLocation(program, "uUseDIS");
         }
 
@@ -691,15 +696,15 @@ public class FrameGenerationEffect extends Effect {
         GLES20.glUniform1i(uUseDISLoc, 0);
 
         // Use flowGlTex as motion texture when DIS Vulkan is active
-        if (disVulkanReady && useHardwareMotion) {
+        if (disVulkanReady && useMotionEstimation) {
             GLES20.glActiveTexture(GLES20.GL_TEXTURE4);
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, disVulkan.getFlowGlTexture());
             GLES20.glUniform1i(uMotionTextureLoc, 4);
-            GLES20.glUniform1i(uUseHardwareMotionLoc, 1);
+            GLES20.glUniform1i(uUseMotionEstimationLoc, 1);
             GLES20.glUniform1i(uUseDISLoc, 1);
-        } else {// Bind motion texture if available (unit 4)
+        } else { // Bind motion texture if available (unit 4)
             GLES20.glActiveTexture(GLES20.GL_TEXTURE4);
-            if (useHardwareMotion && qcomMotionTexture != -1) {
+            if (useMotionEstimation && qcomMotionTexture != -1) {
                 GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, qcomMotionTexture);
             } else {
                 GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
@@ -720,8 +725,8 @@ public class FrameGenerationEffect extends Effect {
         GLES20.glUniform1f(uBlendFactorLoc, 0.0f);
         GLES20.glUniform1f(uMotionScaleLoc, DEFAULT_MOTION_SCALE);
 
-        if (uUseHardwareMotionLoc != -1)
-            GLES20.glUniform1i(uUseHardwareMotionLoc, 0);
+        if (uUseMotionEstimationLoc != -1)
+            GLES20.glUniform1i(uUseMotionEstimationLoc, 0);
 
         if (isEnabled && currentSequence == 1) {
             boolean canShowGenerated = texturePrev != -1 && textureCurr != -1 && !waitingForSecondFrame;
@@ -731,26 +736,26 @@ public class FrameGenerationEffect extends Effect {
                 GLES20.glUniform1f(uBlendFactorLoc, blendFactor);
                 GLES20.glUniform1f(uMotionScaleLoc, motionScale);
 
-                if (useHardwareMotion && uUseHardwareMotionLoc != -1) {
-                    GLES20.glUniform1i(uUseHardwareMotionLoc, 1);
+                if (useMotionEstimation && uUseMotionEstimationLoc != -1) {
+                    GLES20.glUniform1i(uUseMotionEstimationLoc, 1);
                 }
 
                 long currentTimeNs = System.nanoTime();
                 long timeSinceRealNs = currentTimeNs - lastRealFrameTimeNs;
                 LogString(String.format("Showing GENERATED frame, resolution=%dx%d, blend=%.3f (%.2fms since real), hwMotion=%b",
-                        currentWidth, currentHeight, blendFactor, timeSinceRealNs / (double)NANOS_PER_MILLISECOND, useHardwareMotion));
+                        currentWidth, currentHeight, blendFactor, timeSinceRealNs / (double)NANOS_PER_MILLISECOND, useMotionEstimation));
             } else {
                 LogString("Cannot show generated, showing REAL frame instead");
                 GLES20.glUniform1i(uIsEnabledLoc, 0);
                 GLES20.glUniform1f(uBlendFactorLoc, 0.0f);
                 GLES20.glUniform1f(uMotionScaleLoc, DEFAULT_MOTION_SCALE);
-                GLES20.glUniform1i(uUseHardwareMotionLoc, 0);
+                GLES20.glUniform1i(uUseMotionEstimationLoc, 0);
             }
         } else {
             GLES20.glUniform1i(uIsEnabledLoc, 0);
             GLES20.glUniform1f(uBlendFactorLoc, 0.0f);
             GLES20.glUniform1f(uMotionScaleLoc, DEFAULT_MOTION_SCALE);
-            GLES20.glUniform1i(uUseHardwareMotionLoc, 0);
+            GLES20.glUniform1i(uUseMotionEstimationLoc, 0);
             LogString(String.format("Showing REAL frame, resolution=%dx%d (sequence=%d, enabled=%b)",
                     currentWidth, currentHeight, currentSequence, isEnabled));
         }
@@ -1066,27 +1071,138 @@ public class FrameGenerationEffect extends Effect {
             "uniform sampler2D uTextureCurr;",
             "uniform sampler2D uMotionTexture;",
             "uniform int uIsEnabled;",
-            "uniform int uUseHardwareMotion;",
+            "uniform int uUseMotionEstimation;",
             "uniform int uUseDIS;",
             "uniform float uBlendFactor;",
             "uniform vec2 resolution;",
             "uniform int uUsePostProc;",
             "uniform float uMotionScale;",
             "#define DIS_MOTION_FACTOR 2.0",
+            "#define GLES_MOTION_FACTOR 2.0",
+    } );
 
-            "vec4 visualizeMotion() {",
-            "    return texture2D(uMotionTexture, vUV);",
-            "    vec2 mv = texture2D(uMotionTexture, vUV).rg;",
-            "    float len = length(mv);",
-            "    if (len < 0.001) {",
-            "        return vec4(0.0, 0.0, 0.0, 1.0);",
-            "    } else {",
-            "        float r = clamp(-mv.x / 1.0, 0.0, 1.0);",
-            "        float g = clamp(mv.x / 1.0, 0.0, 1.0);",
-            "        float b = clamp(-mv.y / 1.0, 0.0, 1.0);",
-            "        return vec4(r, g, b, 1.0);",
+    private static final String FRAGMENT_SHADER_FUNCTIONS = String.join("\n", new CharSequence[]{
+            "vec2 motionEstimate(vec2 uv) {",
+            "    if (uUseMotionEstimation == 1) {",
+            "        vec2 motionPixels = texture2D(uMotionTexture, uv).rg;",
+            "        if (uUseDIS == 1) {",
+            "            return motionPixels / uMotionScale / DIS_MOTION_FACTOR;",
+            "        } else {",
+            "            return motionPixels / resolution / uMotionScale;",
+            "        }",
             "    }",
+
+            "    // GLES 2.0 motion estimation fallback",
+            "    vec2 texel = 1.0 / resolution;",
+            "    vec3 wLuma = vec3(0.299, 0.587, 0.114);",
+            "",
+            "    // 1. Difference (Curr − Prev) in current pixel",
+            "    vec3 cPrev = texture2D(uTexturePrev, uv).rgb;",
+            "    vec3 cCurr = texture2D(uTextureCurr, uv).rgb;",
+            "    float lumaP = dot(cPrev, wLuma);",
+            "    float lumaC = dot(cCurr, wLuma);",
+            "    float dt = lumaC - lumaP;",
+            "    if (abs(dt) < MOTION_THRESHOLD) {",
+            "        return vec2(0.0) / uMotionScale / GLES_MOTION_FACTOR;",
+            "    }",
+            "",
+            "    // 2. Prev spatial gradients + rough Lucas–Kanade vectors (in pixels)",
+            "    float lxp = dot(texture2D(uTexturePrev, uv + vec2( texel.x, 0.0)).rgb, wLuma);",
+            "    float lxm = dot(texture2D(uTexturePrev, uv + vec2(-texel.x, 0.0)).rgb, wLuma);",
+            "    float lyp = dot(texture2D(uTexturePrev, uv + vec2(0.0,  texel.y)).rgb, wLuma);",
+            "    float lym = dot(texture2D(uTexturePrev, uv + vec2(0.0, -texel.y)).rgb, wLuma);",
+            "    float gx = (lxp - lxm) * 0.5;",
+            "    float gy = (lyp - lym) * 0.5;",
+            "    vec2 roughMotionUV = vec2(0.0);",
+            "    float g2 = gx * gx + gy * gy;",
+            "    if (g2 > 1e-6) {",
+            "        // LK: m_px = -dt * grad / |grad|^2",
+            "        vec2 roughPx = -dt * vec2(gx, gy) / g2;",
+            "        float rlen = length(roughPx);",
+            "        if (rlen > SEARCH_LIMIT) roughPx *= SEARCH_LIMIT / rlen;",
+            "        roughMotionUV = roughPx * texel;",
+            "    }",
+            "",
+            "    // 3. Refine: RADIUS = SEARCH_STEPS * STEP_PIXELS; motion direction Prev->Curr",
+            "    float bestSAD = distance(cCurr, cPrev);  // no motion candidate",
+            "    vec2  bestMotion = vec2(0.0);",
+            "    for (int i = 1; i <= SEARCH_STEPS; i++) {",
+            "        float dPx = float(i) * STEP_PIXELS;",
+            "        vec2 mX = vec2(dPx * texel.x, 0.0);",
+            "        vec2 mY = vec2(0.0, dPx * texel.y);",
+            "        // 4 directions: +X, −X, +Y, −Y",
+            "        float sPX = distance(cCurr, texture2D(uTexturePrev, uv - mX).rgb);",
+            "        float sNX = distance(cCurr, texture2D(uTexturePrev, uv + mX).rgb);",
+            "        float sPY = distance(cCurr, texture2D(uTexturePrev, uv - mY).rgb);",
+            "        float sNY = distance(cCurr, texture2D(uTexturePrev, uv + mY).rgb);",
+            "        if (sPX < bestSAD) { bestSAD = sPX; bestMotion =  mX; }",
+            "        if (sNX < bestSAD) { bestSAD = sNX; bestMotion = -mX; }",
+            "        if (sPY < bestSAD) { bestSAD = sPY; bestMotion =  mY; }",
+            "        if (sNY < bestSAD) { bestSAD = sNY; bestMotion = -mY; }",
+            "    }",
+            "    // Also try Lucas–Kanade rough vectors as additional candidate",
+            "    if (length(roughMotionUV) > 1e-5) {",
+            "        float sRough = distance(cCurr, texture2D(uTexturePrev, uv - roughMotionUV).rgb);",
+            "        if (sRough < bestSAD) {",
+            "            bestSAD = sRough;",
+            "            bestMotion = roughMotionUV;",
+            "        }",
+            "    }",
+            "",
+            "    // 4. Verification",
+            "    if (bestSAD > GOOD_MATCH) { // Bad match",
+            "        return roughMotionUV / uMotionScale / GLES_MOTION_FACTOR;",
+            "    }",
+            "    return bestMotion / uMotionScale / GLES_MOTION_FACTOR;",
             "}",
+            "",
+            "vec4 simplePostProcessing(vec4 color) {",
+            "    float luminance = dot(color.rgb, vec3(0.299, 0.587, 0.114));",
+            "    color.rgb = ((color.rgb - 0.5) * 1.05) + 0.5;",
+            "    color.rgb = mix(vec3(luminance), color.rgb, 1.05);",
+            "    return color;",
+            "}",
+            "",
+            "uniform int uDebugMotion;",
+            "// Transform vector (UV) -> color: direction -> hue (R/G/B angle), length -> luma",
+            "vec3 directionColor(vec2 v) {",
+            "    vec2 m = v * resolution;",
+            "    float len = length(m);",
+            "    if (len < 0.5) {",
+            "        return vec3(0.0);",
+            "    }",
+            "    // Angle -> hue; directions: +X = red, +Y = green, -X = cyan, -Y = blue",
+            "    vec2 dir = m / max(len, 1e-5);",
+            "    float r = clamp( dir.x * 0.5 + 0.5, 0.0, 1.0);",
+            "    float g = clamp( dir.y * 0.5 + 0.5, 0.0, 1.0);",
+            "    float b = clamp(-dir.x * 0.5 + 0.5, 0.0, 1.0);",
+            "    float brightness = clamp(log(1.0 + len) / log(1.0 + 32.0), 0.0, 1.0);",
+            "    return vec3(r, g, b) * (0.3 + 0.7 * brightness);",
+            "}",
+            "",
+            "vec4 visualizeMotion() {",
+            "    vec2 motion;",
+            "    if (uUseMotionEstimation == 1) {",
+            "        vec2 motionPixels = texture2D(uMotionTexture, vUV).rg;",
+            "        if (uUseDIS == 1) {",
+            "            motion = motionPixels / uMotionScale / DIS_MOTION_FACTOR;",
+            "        } else {",
+            "            motion = motionPixels / resolution / uMotionScale;",
+            "        }",
+            "    } else {",
+            "        motion = motionEstimate(vUV);",
+            "    }",
+            "",
+            "    return vec4(directionColor(motion), 1.0);",
+            "}",
+    } );
+
+    private static final String FRAGMENT_SHADER_DEBUG_MOTION_VISUALIZATION = String.join("\n", new CharSequence[]{
+            /*"    if (uUsePostProc == 1) {",
+            "        gl_FragColor = visualizeMotion();",
+            "        return;",
+            "    }",*/
+            "",
     } );
 
     private static class FastFrameGenerationMaterial extends ScreenMaterial {
@@ -1098,37 +1214,33 @@ public class FrameGenerationEffect extends Effect {
         protected String getFragmentShader() {
             return String.join("\n", new CharSequence[]{
                     FRAGMENT_SHADER_HEADER,
+                    "#define MOTION_THRESHOLD 0.010",
+                    "#define GOOD_MATCH 0.10",
+                    "#define SEARCH_LIMIT 48.0",
+                    "#define STEP_PIXELS 6.0",
+                    "#define SEARCH_STEPS 8",
+                    FRAGMENT_SHADER_FUNCTIONS,
+
                     "void main() {",
+                    FRAGMENT_SHADER_DEBUG_MOTION_VISUALIZATION,
                     "    if (uIsEnabled == 1) {",
                     "        vec4 prev = texture2D(uTexturePrev, vUV);",
                     "        vec4 curr = texture2D(uTextureCurr, vUV);",
                     "        vec4 result;",
-                    "        if (uUseHardwareMotion == 1) {",
-                    "            vec2 motionPixels = texture2D(uMotionTexture, vUV).rg;",
-                    "            vec2 motionUV;",
-                    "            if (uUseDIS == 1) {",
-                    "                motionUV = motionPixels / uMotionScale / DIS_MOTION_FACTOR;",
-                    "            } else {",
-                    "                motionUV = motionPixels / resolution / uMotionScale;",
-                    "            }",
-                    "            vec2 uvPrev = clamp(vUV - motionUV * uBlendFactor, 0.0, 1.0);",
-                    "            vec2 uvCurr = clamp(vUV + motionUV * (1.0 - uBlendFactor), 0.0, 1.0);",
-                    "            vec4 sampledPrev = texture2D(uTexturePrev, uvPrev);",
-                    "            vec4 sampledCurr = texture2D(uTextureCurr, uvCurr);",
-                    "            result = mix(sampledPrev, sampledCurr, uBlendFactor);",
-                    "        } else {",
-                    "            result = mix(prev, curr, uBlendFactor);",
-                    "        }",
+                    "        vec2 motionUV = motionEstimate(vUV);",
+                    "        vec2 uvPrev = clamp(vUV - motionUV * uBlendFactor, 0.0, 1.0);",
+                    "        vec2 uvCurr = clamp(vUV + motionUV * (1.0 - uBlendFactor), 0.0, 1.0);",
+                    "        vec4 sampledPrev = texture2D(uTexturePrev, uvPrev);",
+                    "        vec4 sampledCurr = texture2D(uTextureCurr, uvCurr);",
+                    "        result = mix(sampledPrev, sampledCurr, uBlendFactor);",
                     "        if (uUsePostProc == 1) {",
-                    "            float contrast = 1.04;",
-                    "            result.rgb = ((result.rgb - 0.5) * contrast) + 0.5;",
+                    "            result = simplePostProcessing(result);",
                     "        }",
                     "        gl_FragColor = result;",
                     "    } else {",
                     "        vec4 prev = texture2D(uTexturePrev, vUV);",
                     "        if (uUsePostProc == 1) {",
-                    "            float contrast = 1.04;",
-                    "            prev.rgb = ((prev.rgb - 0.5) * contrast) + 0.5;",
+                    "            prev = simplePostProcessing(prev);",
                     "        }",
                     "        gl_FragColor = prev;",
                     "    }",
@@ -1142,51 +1254,15 @@ public class FrameGenerationEffect extends Effect {
         protected String getFragmentShader() {
             return String.join("\n", new CharSequence[]{
                     FRAGMENT_SHADER_HEADER,
-                    "vec2 fastMotionEstimate(vec2 uv) {",
-                    "    if (uUseHardwareMotion == 1) {",
-                    "        vec2 motionPixels = texture2D(uMotionTexture, uv).rg;",
-                    "        if (uUseDIS == 1) {",
-                    "            return motionPixels / uMotionScale / DIS_MOTION_FACTOR;",
-                    "        } else {",
-                    "            return motionPixels / resolution / uMotionScale;",
-                    "        }",
-                    "    }",
-                    "    vec2 texel = 1.0 / resolution;",
-                    "    float minDiff = 1.0;",
-                    "    vec2 bestMotion = vec2(0.0);",
-                    "    vec2 offsets[4];",
-                    "    offsets[0] = vec2(1.0, 0.0) * texel;",
-                    "    offsets[1] = vec2(-1.0, 0.0) * texel;",
-                    "    offsets[2] = vec2(0.0, 1.0) * texel;",
-                    "    offsets[3] = vec2(0.0, -1.0) * texel;",
-                    "    vec3 centerColor = texture2D(uTexturePrev, uv).rgb;",
-                    "    for (int i = 0; i < 4; i++) {",
-                    "        vec2 sampleUV = uv + offsets[i];",
-                    "        vec3 sampleColor = texture2D(uTextureHistory, sampleUV).rgb;",
-                    "        float diff = distance(centerColor, sampleColor);",
-                    "        if (diff < minDiff) {",
-                    "            minDiff = diff;",
-                    "            bestMotion = offsets[i];",
-                    "        }",
-                    "    }",
-                    "    if (minDiff > 0.2) return vec2(0.0);",
-                    "    return bestMotion;",
-                    "}",
-
-                    "float fastEdgeDetection(vec2 uv) {",
-                    "    vec2 texel = 1.0 / resolution;",
-                    "    float center = texture2D(uTextureCurr, uv).r;",
-                    "    float right = texture2D(uTextureCurr, uv + vec2(texel.x, 0.0)).r;",
-                    "    float left = texture2D(uTextureCurr, uv - vec2(texel.x, 0.0)).r;",
-                    "    float up = texture2D(uTextureCurr, uv + vec2(0.0, texel.y)).r;",
-                    "    float down = texture2D(uTextureCurr, uv - vec2(0.0, texel.y)).r;",
-                    "    float gx = right - left;",
-                    "    float gy = up - down;",
-                    "    return sqrt(gx * gx + gy * gy);",
-                    "}",
+                    "#define MOTION_THRESHOLD 0.015",
+                    "#define GOOD_MATCH 0.15",
+                    "#define SEARCH_LIMIT 48.0",
+                    "#define STEP_PIXELS 4.0",
+                    "#define SEARCH_STEPS 12",
+                    FRAGMENT_SHADER_FUNCTIONS,
 
                     "vec4 generateFrame(vec2 uv) {",
-                    "    vec2 motionUV = fastMotionEstimate(uv);",
+                    "    vec2 motionUV = motionEstimate(uv);",
                     "    float motionLength = length(motionUV);",
                     "    ",
                     "    if (motionLength > 0.0001) {",
@@ -1201,39 +1277,19 @@ public class FrameGenerationEffect extends Effect {
                     "    return mix(colorPrev, colorCurr, uBlendFactor);",
                     "}",
 
-                    "vec4 applySharpen(vec4 color, vec2 uv) {",
-                    "    vec2 texel = 1.0 / resolution;",
-                    "    vec4 blurred = vec4(0.0);",
-                    "    blurred += texture2D(uTextureCurr, uv) * 0.5;",
-                    "    blurred += texture2D(uTextureCurr, uv + vec2(texel.x, 0.0)) * 0.125;",
-                    "    blurred += texture2D(uTextureCurr, uv - vec2(texel.x, 0.0)) * 0.125;",
-                    "    blurred += texture2D(uTextureCurr, uv + vec2(0.0, texel.y)) * 0.125;",
-                    "    blurred += texture2D(uTextureCurr, uv - vec2(0.0, texel.y)) * 0.125;",
-                    "    return color + (color - blurred) * 0.3;",
-                    "}",
-
                     "void main() {",
+                    FRAGMENT_SHADER_DEBUG_MOTION_VISUALIZATION,
                     "    vec2 uv = vUV;",
                     "    if (uIsEnabled == 1) {",
                     "        vec4 generated = generateFrame(uv);",
                     "        if (uUsePostProc == 1) {",
-                    "            float luminance = dot(generated.rgb, vec3(0.299, 0.587, 0.114));",
-                    "            float contrast = 1.05;",
-                    "            generated.rgb = ((generated.rgb - 0.5) * contrast) + 0.5;",
-                    "            generated.rgb = mix(vec3(luminance), generated.rgb, 1.05);",
-                    "            float edge = fastEdgeDetection(uv);",
-                    "            if (edge > 0.05) {",
-                    "                generated = applySharpen(generated, uv);",
-                    "            }",
+                    "            generated = simplePostProcessing(generated);",
                     "        }",
                     "        gl_FragColor = clamp(generated, 0.0, 1.0);",
                     "    } else {",
                     "        vec4 prev = texture2D(uTexturePrev, uv);",
                     "        if (uUsePostProc == 1) {",
-                    "            float luminance = dot(prev.rgb, vec3(0.299, 0.587, 0.114));",
-                    "            float contrast = 1.05;",
-                    "            prev.rgb = ((prev.rgb - 0.5) * contrast) + 0.5;",
-                    "            prev.rgb = mix(vec3(luminance), prev.rgb, 1.05);",
+                    "            prev = simplePostProcessing(prev);",
                     "        }",
                     "        gl_FragColor = prev;",
                     "    }",
@@ -1247,38 +1303,12 @@ public class FrameGenerationEffect extends Effect {
         protected String getFragmentShader() {
             return String.join("\n", new CharSequence[]{
                     FRAGMENT_SHADER_HEADER,
-                    "vec2 enhancedMotionEstimate(vec2 uv) {",
-                    "    if (uUseHardwareMotion == 1) {",
-                    "        vec2 motionPixels = texture2D(uMotionTexture, uv).rg;",
-                    "        if (uUseDIS == 1) {",
-                    "            return motionPixels / uMotionScale / DIS_MOTION_FACTOR;",
-                    "        } else {",
-                    "            return motionPixels / resolution / uMotionScale;",
-                    "        }",
-                    "    }",
-                    "    vec2 texel = 1.0 / resolution;",
-                    "    float minDiff = 1.0;",
-                    "    vec2 bestMotion = vec2(0.0);",
-                    "    for (float dy = -1.0; dy <= 1.0; dy += 1.0) {",
-                    "        for (float dx = -1.0; dx <= 1.0; dx += 1.0) {",
-                    "            vec2 offset = vec2(dx, dy) * texel;",
-                    "            float diff = 0.0;",
-                    "            diff += distance(texture2D(uTexturePrev, uv).rgb, texture2D(uTextureHistory, uv + offset).rgb);",
-                    "            diff += distance(texture2D(uTexturePrev, uv + vec2(texel.x, 0.0)).rgb, texture2D(uTextureHistory, uv + vec2(texel.x, 0.0) + offset).rgb) * 0.5;",
-                    "            diff += distance(texture2D(uTexturePrev, uv - vec2(texel.x, 0.0)).rgb, texture2D(uTextureHistory, uv - vec2(texel.x, 0.0) + offset).rgb) * 0.5;",
-                    "            diff += distance(texture2D(uTexturePrev, uv + vec2(0.0, texel.y)).rgb, texture2D(uTextureHistory, uv + vec2(0.0, texel.y) + offset).rgb) * 0.5;",
-                    "            diff += distance(texture2D(uTexturePrev, uv - vec2(0.0, texel.y)).rgb, texture2D(uTextureHistory, uv - vec2(0.0, texel.y) + offset).rgb) * 0.5;",
-                    "            float penalty = length(offset) * 0.15;",
-                    "            diff += penalty;",
-                    "            if (diff < minDiff) {",
-                    "                minDiff = diff;",
-                    "                bestMotion = offset;",
-                    "            }",
-                    "        }",
-                    "    }",
-                    "    if (minDiff > 0.3) return vec2(0.0);",
-                    "    return bestMotion;",
-                    "}",
+                    "#define MOTION_THRESHOLD 0.010",
+                    "#define GOOD_MATCH 0.10",
+                    "#define SEARCH_LIMIT 64.0",
+                    "#define STEP_PIXELS 4.0",
+                    "#define SEARCH_STEPS 16",
+                    FRAGMENT_SHADER_FUNCTIONS,
 
                     "float enhancedEdgeDetection(vec2 uv) {",
                     "    vec2 texel = 1.0 / resolution;",
@@ -1336,71 +1366,21 @@ public class FrameGenerationEffect extends Effect {
                     "    }",
                     "}",
 
-                    "vec4 fastSharpen(vec4 color, vec2 uv) {",
-                    "    vec2 texel = 1.0 / resolution;",
-                    "    vec4 blurred = color * 0.4;",
-                    "    blurred += texture2D(uTextureCurr, uv + vec2(texel.x, 0.0)) * 0.15;",
-                    "    blurred += texture2D(uTextureCurr, uv - vec2(texel.x, 0.0)) * 0.15;",
-                    "    blurred += texture2D(uTextureCurr, uv + vec2(0.0, texel.y)) * 0.15;",
-                    "    blurred += texture2D(uTextureCurr, uv - vec2(0.0, texel.y)) * 0.15;",
-                    "    float amount = 0.4;",
-                    "    vec4 sharpened = color + (color - blurred) * amount;",
-                    "    return clamp(sharpened, 0.0, 1.0);",
-                    "}",
-
-                    "vec4 enhancedColorCorrection(vec4 color) {",
-                    "    float luminance = dot(color.rgb, vec3(0.299, 0.587, 0.114));",
-                    "    float adaptiveContrast = 1.08;",
-                    "    if (luminance > 0.8) adaptiveContrast = 1.04;",
-                    "    if (luminance < 0.2) adaptiveContrast = 1.12;",
-                    "    color.rgb = ((color.rgb - 0.5) * adaptiveContrast) + 0.5;",
-                    "    float saturation = 1.06;",
-                    "    vec3 gray = vec3(luminance);",
-                    "    color.rgb = mix(gray, color.rgb, saturation);",
-                    "    color.rgb = pow(color.rgb, vec3(0.98));",
-                    "    return color;",
-                    "}",
-
                     "void main() {",
+                    FRAGMENT_SHADER_DEBUG_MOTION_VISUALIZATION,
                     "    vec2 uv = vUV;",
                     "    if (uIsEnabled != 1) {",
                     "        vec4 prev = texture2D(uTexturePrev, uv);",
                     "        if (uUsePostProc == 1) {",
-                    "            prev = enhancedColorCorrection(prev);",
-                    "            float edgeStrength = enhancedEdgeDetection(uv);",
-                    "            if (edgeStrength > 0.15) {",
-                    "                prev = fastSharpen(prev, uv);",
-                    "            }",
-                    "            float textureDetail = fastTextureDetection(uv);",
-                    "            if (textureDetail < 0.08) {",
-                    "                vec2 texel = 1.0 / resolution;",
-                    "                prev = prev * 0.6;",
-                    "                prev += texture2D(uTexturePrev, uv + vec2(texel.x, 0.0)) * 0.1;",
-                    "                prev += texture2D(uTexturePrev, uv - vec2(texel.x, 0.0)) * 0.1;",
-                    "                prev += texture2D(uTexturePrev, uv + vec2(0.0, texel.y)) * 0.1;",
-                    "                prev += texture2D(uTexturePrev, uv - vec2(0.0, texel.y)) * 0.1;",
-                    "            }",
+                    "            prev = simplePostProcessing(prev);",
                     "        }",
                     "        gl_FragColor = clamp(prev, 0.0, 1.0);",
                     "        return;",
                     "    }",
-                    "    vec2 motion = enhancedMotionEstimate(uv);",
+                    "    vec2 motion = motionEstimate(uv);",
                     "    vec4 generated = adaptiveBlending(uv, motion);",
                     "    if (uUsePostProc == 1) {",
-                    "        generated = enhancedColorCorrection(generated);",
-                    "        float edgeStrength = enhancedEdgeDetection(uv);",
-                    "        if (edgeStrength > 0.15) {",
-                    "            generated = fastSharpen(generated, uv);",
-                    "        }",
-                    "        float textureDetail = fastTextureDetection(uv);",
-                    "        if (textureDetail < 0.08) {",
-                    "        vec2 texel = 1.0 / resolution;",
-                    "            generated = generated * 0.6;",
-                    "            generated += texture2D(uTextureCurr, uv + vec2(texel.x, 0.0)) * 0.1;",
-                    "            generated += texture2D(uTextureCurr, uv - vec2(texel.x, 0.0)) * 0.1;",
-                    "            generated += texture2D(uTextureCurr, uv + vec2(0.0, texel.y)) * 0.1;",
-                    "            generated += texture2D(uTextureCurr, uv - vec2(0.0, texel.y)) * 0.1;",
-                    "        }",
+                    "        generated = simplePostProcessing(generated);",
                     "    }",
                     "    gl_FragColor = clamp(generated, 0.0, 1.0);",
                     "}"
