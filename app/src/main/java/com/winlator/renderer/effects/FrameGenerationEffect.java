@@ -5,9 +5,11 @@ import android.opengl.GLES20;
 import android.opengl.GLES30;
 import android.util.Log;
 
+import com.winlator.XrActivity;
 import com.winlator.renderer.DIS;
 import com.winlator.renderer.EffectComposer;
 import com.winlator.renderer.GLRenderer;
+import com.winlator.renderer.ViewTransformation;
 import com.winlator.renderer.material.ScreenMaterial;
 import com.winlator.renderer.material.ShaderMaterial;
 
@@ -104,6 +106,13 @@ public class FrameGenerationEffect extends Effect {
     private long lastDrawNs = 0;
     private long drawIntervalNs = 0;
     private long lastShownStep = -1;
+
+    // DIS works on frames at the X screen's size (the container resolution), drawn there by the
+    // renderer; on the surface they cover only the scene's viewport, disRect (x, y, w, h in UV).
+    private boolean disAtScreenSize = false;
+    private int disCaptureFbo = -1;
+    private final float[] disRect = {0.0f, 0.0f, 1.0f, 1.0f};
+    private int uDisRectLoc = -1;
 
     // Uniform locations
     public int uIsEnabledLoc = -1;
@@ -361,13 +370,14 @@ public class FrameGenerationEffect extends Effect {
     }
 
     private void clearHistory() {
-        if (textureHistory != -1) {
+        // The prev/curr textures DIS hands out belong to its AHBs and are deleted with them.
+        if (textureHistory != -1 && !isDisTexture(textureHistory)) {
             GLES20.glDeleteTextures(1, new int[]{textureHistory}, 0);
         }
-        if (texturePrev != -1) {
+        if (texturePrev != -1 && !isDisTexture(texturePrev)) {
             GLES20.glDeleteTextures(1, new int[]{texturePrev}, 0);
         }
-        if (textureCurr != -1) {
+        if (textureCurr != -1 && !isDisTexture(textureCurr)) {
             GLES20.glDeleteTextures(1, new int[]{textureCurr}, 0);
         }
         if (capturedRealFrame != -1) {
@@ -663,21 +673,28 @@ public class FrameGenerationEffect extends Effect {
     // the previous real frame to it - once per real frame, not once per generated one. DIS orders
     // itself after the copy on the GPU, so nothing here waits for it.
     private void pushRealFrameToDis(int width, int height) {
-        disVulkan.ensureTextures(width, height);
+        // Outside XR the frame is drawn again at the container resolution rather than copied from
+        // the surface: no resampling, and far fewer pixels to copy, warp and blend.
+        disAtScreenSize = !XrActivity.isEnabled(null);
+        if (disAtScreenSize) {
+            disVulkan.ensureTextures(renderer.getScreenWidth(), renderer.getScreenHeight());
+        } else {
+            disVulkan.ensureTextures(width, height);
+        }
         int generations = Math.max(1, Math.min(3, fpsMultiplier - 1));
         if (!hasFirstFrame) {
-            disVulkan.copyFrameToPrev();
+            captureFrameForDis(true);
             disVulkan.pushFrame(true, generations);
             hasFirstFrame = true;
             waitingForSecondFrame = true;
         } else if (waitingForSecondFrame) {
-            disVulkan.copyFrameToCurr();
+            captureFrameForDis(false);
             disVulkan.pushFrame(false, generations);
             hasSecondFrame = true;
             waitingForSecondFrame = false;
         } else {
             disVulkan.swapPrevCurr();
-            disVulkan.copyFrameToCurr();
+            captureFrameForDis(false);
             disVulkan.pushFrame(false, generations);
         }
         texturePrev = disVulkan.getPrevGlTexture();
@@ -735,6 +752,40 @@ public class FrameGenerationEffect extends Effect {
         if (disFrameReady) currentSequence = 1;
     }
 
+    private void captureFrameForDis(boolean toPrev) {
+        if (!disAtScreenSize) {
+            if (toPrev) disVulkan.copyFrameToPrev(); else disVulkan.copyFrameToCurr();
+            return;
+        }
+        int texture = toPrev ? disVulkan.getPrevGlTexture() : disVulkan.getCurrGlTexture();
+        if (texture == 0) return;
+
+        int[] bound = new int[1];
+        GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, bound, 0);
+        if (disCaptureFbo == -1) {
+            int[] fbo = new int[1];
+            GLES20.glGenFramebuffers(1, fbo, 0);
+            disCaptureFbo = fbo[0];
+        }
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, disCaptureFbo);
+        GLES20.glFramebufferTexture2D(GLES20.GL_FRAMEBUFFER, GLES20.GL_COLOR_ATTACHMENT0,
+                GLES20.GL_TEXTURE_2D, texture, 0);
+        renderer.drawSceneAtScreenSize(disCaptureFbo);
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, bound[0]);
+    }
+
+    private void updateDisRect() {
+        if (!disAtScreenSize || renderer.isFullscreen() || renderer.surfaceWidth <= 0 || renderer.surfaceHeight <= 0) {
+            disRect[0] = 0.0f; disRect[1] = 0.0f; disRect[2] = 1.0f; disRect[3] = 1.0f;
+            return;
+        }
+        ViewTransformation view = renderer.viewTransformation;
+        disRect[0] = (float) view.viewOffsetX / renderer.surfaceWidth;
+        disRect[1] = (float) view.viewOffsetY / renderer.surfaceHeight;
+        disRect[2] = (float) view.viewWidth / renderer.surfaceWidth;
+        disRect[3] = (float) view.viewHeight / renderer.surfaceHeight;
+    }
+
     private boolean isDisTexture(int texture) {
         return disVulkan != null && texture != -1 &&
                 (texture == disVulkan.getPrevGlTexture() || texture == disVulkan.getCurrGlTexture());
@@ -760,6 +811,7 @@ public class FrameGenerationEffect extends Effect {
             uUseMotionEstimationLoc = GLES20.glGetUniformLocation(program, "uUseMotionEstimation");
             uUseDISLoc = GLES20.glGetUniformLocation(program, "uUseDIS");
             uUseDISFrameLoc = GLES20.glGetUniformLocation(program, "uUseDISFrame");
+            uDisRectLoc = GLES20.glGetUniformLocation(program, "uDisRect");
         }
 
         // Bind prev texture to unit 1
@@ -858,6 +910,28 @@ public class FrameGenerationEffect extends Effect {
                     currentWidth, currentHeight, currentSequence, isEnabled));
         }
 
+        // With DIS every frame shown comes from its textures: the generated one, or else the real
+        // frame the effect would show (the previous one; with pacing, the latest once there is a pair).
+        if (disVulkanReady && isEnabled) {
+            int shown = 0;
+            if (disFrameReady && currentSequence == 1) {
+                shown = disVulkan.getOutGlTexture();
+            } else if (hasFirstFrame) {
+                shown = paceByRealFrames && hasSecondFrame ? textureCurr : texturePrev;
+            }
+            if (shown > 0) {
+                GLES20.glActiveTexture(GLES20.GL_TEXTURE4);
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, shown);
+                GLES20.glUniform1i(uMotionTextureLoc, 4);
+                GLES20.glUniform1i(uIsEnabledLoc, 1);
+                if (uUseDISFrameLoc != -1) GLES20.glUniform1i(uUseDISFrameLoc, 1);
+            }
+            updateDisRect();
+        } else {
+            disRect[0] = 0.0f; disRect[1] = 0.0f; disRect[2] = 1.0f; disRect[3] = 1.0f;
+        }
+        if (uDisRectLoc != -1) GLES20.glUniform4f(uDisRectLoc, disRect[0], disRect[1], disRect[2], disRect[3]);
+
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
     }
 
@@ -865,6 +939,10 @@ public class FrameGenerationEffect extends Effect {
         clearHistory();
         deleteQCOMResources();
 
+        if (disCaptureFbo != -1) {
+            GLES20.glDeleteFramebuffers(1, new int[]{disCaptureFbo}, 0);
+            disCaptureFbo = -1;
+        }
         if (disVulkan != null) {
             disVulkan.cleanup();
             disVulkan = null;
@@ -974,6 +1052,11 @@ public class FrameGenerationEffect extends Effect {
         capturedRealFrame = -1;
         hasCapturedFrame = false;
         skipFirstRealDisplay = false;
+
+        realFramePending = false;
+        disFrameReady = false;
+        pairStartNs = 0;
+        lastShownStep = -1;
     }
 
     public boolean isReadyForGeneration() {
@@ -1172,6 +1255,7 @@ public class FrameGenerationEffect extends Effect {
             "uniform int uUseMotionEstimation;",
             "uniform int uUseDIS;",
             "uniform int uUseDISFrame;",
+            "uniform vec4 uDisRect;",
             "uniform float uBlendFactor;",
             "uniform vec2 resolution;",
             "uniform int uUsePostProc;",
@@ -1299,7 +1383,11 @@ public class FrameGenerationEffect extends Effect {
     // Placed at the top of every material's main(): a frame DIS already generated is drawn as is.
     private static final String FRAGMENT_SHADER_DEBUG_MOTION_VISUALIZATION = String.join("\n", new CharSequence[]{
             "    if (uIsEnabled == 1 && uUseDISFrame == 1) {",
-            "        vec4 disFrame = texture2D(uMotionTexture, vUV);",
+            "        vec2 disUV = (vUV - uDisRect.xy) / uDisRect.zw;",
+            "        vec4 disFrame = vec4(0.0);",
+            "        if (all(greaterThanEqual(disUV, vec2(0.0))) && all(lessThanEqual(disUV, vec2(1.0)))) {",
+            "            disFrame = texture2D(uMotionTexture, disUV);",
+            "        }",
             "        if (uUsePostProc == 1) {",
             "            disFrame = simplePostProcessing(disFrame);",
             "        }",
