@@ -95,6 +95,16 @@ public class FrameGenerationEffect extends Effect {
     // A generated frame rendered by DIS is waiting in its out texture for the next draw.
     private boolean disFrameReady = false;
 
+    // DIS pacing by the game's own frames (see prepareFramePaced).
+    private boolean paceByRealFrames = false;
+    private boolean realFramePending = false;
+    private long lastRealFrameEventNs = 0;
+    private long realFrameEventIntervalNs = 0;
+    private long pairStartNs = 0;
+    private long lastDrawNs = 0;
+    private long drawIntervalNs = 0;
+    private long lastShownStep = -1;
+
     // Uniform locations
     public int uIsEnabledLoc = -1;
     private int uBlendFactorLoc = -1;
@@ -369,10 +379,31 @@ public class FrameGenerationEffect extends Effect {
         capturedRealFrame = -1;
     }
 
+    /**
+     * The game has presented a new frame. Called on the GL thread before the next draw, which
+     * then shows it; with DIS this switches the effect to pacing by these events.
+     */
+    public void onRealFrame() {
+        long now = System.nanoTime();
+        if (lastRealFrameEventNs != 0) {
+            long dt = now - lastRealFrameEventNs;
+            if (dt >= 2 * NANOS_PER_MILLISECOND && dt <= 250 * NANOS_PER_MILLISECOND) {
+                realFrameEventIntervalNs = realFrameEventIntervalNs == 0 ? dt : (realFrameEventIntervalNs * 3 + dt) / 4;
+            }
+        }
+        lastRealFrameEventNs = now;
+        realFramePending = true;
+        paceByRealFrames = true;
+    }
+
     public int getFrameToDisplay() {
         if (!isEnabled) {
             LogString("Generation not enabled, showing real frame");
             return 0;
+        }
+
+        if (paceByRealFrames && disVulkanReady) {
+            return isReadyForGeneration() ? 1 : 0;
         }
 
         int requiredDisplayCount = (currentDisplayFrameType == 0) ?
@@ -486,6 +517,11 @@ public class FrameGenerationEffect extends Effect {
             qcomInitialized = true;
         }
 
+        if (paceByRealFrames && disVulkanReady) {
+            prepareFramePaced(width, height, currentTimeNs);
+            return;
+        }
+
         if (sequence == 0) {
             // Real frame
             currentRealFrameIndex++;
@@ -515,33 +551,7 @@ public class FrameGenerationEffect extends Effect {
                 }
 
                 if (disVulkanReady) {
-                    disVulkan.ensureTextures(width, height);
-
-                    // Every captured real frame goes to DIS right after the copy, and DIS computes the
-                    // flow of the pair there - once per real frame, not once per generated one. DIS
-                    // orders itself after the copy on the GPU, so nothing here waits for it.
-                    int generations = Math.max(1, Math.min(3, fpsMultiplier - 1));
-                    if (!hasFirstFrame) {
-                        disVulkan.copyFrameToPrev();
-                        disVulkan.pushFrame(true, generations);
-                        texturePrev = disVulkan.getPrevGlTexture();
-                        textureCurr = disVulkan.getCurrGlTexture();
-                        hasFirstFrame = true;
-                        waitingForSecondFrame = true;
-                    } else if (waitingForSecondFrame) {
-                        disVulkan.copyFrameToCurr();
-                        disVulkan.pushFrame(false, generations);
-                        texturePrev = disVulkan.getPrevGlTexture();
-                        textureCurr = disVulkan.getCurrGlTexture();
-                        hasSecondFrame = true;
-                        waitingForSecondFrame = false;
-                    } else {
-                        disVulkan.swapPrevCurr();
-                        disVulkan.copyFrameToCurr();
-                        disVulkan.pushFrame(false, generations);
-                        texturePrev = disVulkan.getPrevGlTexture();
-                        textureCurr = disVulkan.getCurrGlTexture();
-                    }
+                    pushRealFrameToDis(width, height);
                 } else {
                     int newTextureId = captureCurrentFrameSimple(width, height);
                     if (newTextureId == -1) return;
@@ -647,6 +657,87 @@ public class FrameGenerationEffect extends Effect {
                 useMotionEstimation = false;
             }
         }
+    }
+
+    // Copies the frame just drawn into the bound framebuffer to DIS, which computes the flow from
+    // the previous real frame to it - once per real frame, not once per generated one. DIS orders
+    // itself after the copy on the GPU, so nothing here waits for it.
+    private void pushRealFrameToDis(int width, int height) {
+        disVulkan.ensureTextures(width, height);
+        int generations = Math.max(1, Math.min(3, fpsMultiplier - 1));
+        if (!hasFirstFrame) {
+            disVulkan.copyFrameToPrev();
+            disVulkan.pushFrame(true, generations);
+            hasFirstFrame = true;
+            waitingForSecondFrame = true;
+        } else if (waitingForSecondFrame) {
+            disVulkan.copyFrameToCurr();
+            disVulkan.pushFrame(false, generations);
+            hasSecondFrame = true;
+            waitingForSecondFrame = false;
+        } else {
+            disVulkan.swapPrevCurr();
+            disVulkan.copyFrameToCurr();
+            disVulkan.pushFrame(false, generations);
+        }
+        texturePrev = disVulkan.getPrevGlTexture();
+        textureCurr = disVulkan.getCurrGlTexture();
+    }
+
+    // Paced by the game's own frames. Each new real frame goes to DIS as soon as it is drawn, and
+    // the frames shown until the next one walk from the previous real frame (t = 0) towards it.
+    // This costs one real frame of latency, but motion never steps back in time and the shown
+    // frames stay evenly spaced even when the game's frame rate differs from the configured one.
+    private void prepareFramePaced(int width, int height, long now) {
+        if (lastDrawNs != 0) {
+            long dt = now - lastDrawNs;
+            if (dt >= 2 * NANOS_PER_MILLISECOND && dt <= 50 * NANOS_PER_MILLISECOND) {
+                drawIntervalNs = drawIntervalNs == 0 ? dt : (drawIntervalNs * 7 + dt) / 8;
+            }
+        }
+        lastDrawNs = now;
+
+        if (realFramePending) {
+            realFramePending = false;
+            pushRealFrameToDis(width, height);
+            pairStartNs = now;
+            lastShownStep = -1;
+            lastRealFrameTimeNs = now;
+        }
+
+        currentSequence = 0;
+        if (!hasSecondFrame) {
+            disFrameReady = false;
+            return;
+        }
+
+        // The game has stopped presenting (loading, pause): show the screen as it is.
+        if (now - lastRealFrameEventNs > 250 * NANOS_PER_MILLISECOND) {
+            disFrameReady = false;
+            lastShownStep = -1;
+            return;
+        }
+
+        // Shown frames step at the configured output rate (initial FPS x multiplier), but never
+        // faster than the display; half a vsync of slack keeps the steps on whole vsyncs.
+        long vsyncNs = drawIntervalNs > 0 ? drawIntervalNs : NANOS_PER_SECOND / Math.max(1, displayRefreshRate);
+        long stepNs = Math.max(vsyncNs, currentTargetFrameIntervalNs);
+        long pairNs = realFrameEventIntervalNs > 0 ? realFrameEventIntervalNs : currentRealFrameIntervalNs;
+        long step = (now - pairStartNs + vsyncNs / 2) / stepNs;
+
+        if (step != lastShownStep) {
+            lastShownStep = step;
+            blendFactor = Math.min(1.0f, (float) (step * stepNs) / pairNs);
+            disFrameReady = disVulkan.generate(blendFactor);
+            LogString(String.format("Paced: step=%d, blend=%.3f, pair=%.1fms, vsync=%.1fms",
+                    step, blendFactor, pairNs / (double) NANOS_PER_MILLISECOND, vsyncNs / (double) NANOS_PER_MILLISECOND));
+        }
+        if (disFrameReady) currentSequence = 1;
+    }
+
+    private boolean isDisTexture(int texture) {
+        return disVulkan != null && texture != -1 &&
+                (texture == disVulkan.getPrevGlTexture() || texture == disVulkan.getCurrGlTexture());
     }
 
     public void setupShaderUniforms() {

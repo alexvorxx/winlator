@@ -297,7 +297,11 @@ public class EffectComposer {
         }
     }
 
+    // Called on the GL thread for every frame the game presents.
     public synchronized void updateFPS() {
+        if (frameGenerationEffect != null && frameGenerationEffect.isEnabled()) {
+            frameGenerationEffect.onRealFrame();
+        }
         if (lastTime == 0) lastTime = SystemClock.elapsedRealtime();
         long time = SystemClock.elapsedRealtime();
         if (time >= lastTime + 500) {
