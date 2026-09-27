@@ -12,8 +12,7 @@ add_subdirectory(virgl_test_server)
 add_subdirectory(OpenXR-SDK)
 add_subdirectory(patchelf)
 
-include_directories(winlator/include
-                    dis)
+include_directories(winlator/include)
 
 set(GLSLC_EXECUTABLE "${ANDROID_NDK}/shader-tools/windows-x86_64/glslc.exe")
 
@@ -21,23 +20,27 @@ if(NOT EXISTS "${GLSLC_EXECUTABLE}")
     message(FATAL_ERROR "glslc not found at ${GLSLC_EXECUTABLE}. Check NDK installation.")
 endif()
 
-# ── Shader source files ──
-set(DIS_SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/shaders)
-set(DIS_SHADER_BUILD_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders_spv)
+# ── DIS frame generator ──
+# The generator lives in dis/ (public header and GLSL shaders under dis/include, implementation
+# under dis/src); dis/dis.cpp and dis/dis_jni.cpp connect it to the GLES frame-generation effect
+# through AHardwareBuffers. Shaders are compiled to SPIR-V and embedded as C arrays.
+set(DIS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/dis)
+set(DIS_SHADER_DIR ${DIS_DIR}/include/shaders)
+set(DIS_SHADER_OUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/dis_gen/shaders)
+file(MAKE_DIRECTORY ${DIS_SHADER_OUT_DIR})
 
-file(MAKE_DIRECTORY ${DIS_SHADER_BUILD_DIR})
-
-# List of all DIS shaders
 set(DIS_SHADERS
-        dis_downscale_rgba8
-        dis_downscale_r32
+        dis_luma_r16
         dis_luma_r32
         dis_gradient
         dis_inverse_search
         dis_propagate
         dis_densify
-        dis_flow_to_ahb
         dis_interpolate
+        dis_hist
+        dis_side
+        dis_flow_pack
+        dis_me_luma
         dis_vr_prep
         dis_vr_d1
         dis_vr_d2
@@ -45,58 +48,48 @@ set(DIS_SHADERS
         dis_vr_coef
         dis_vr_sor
         dis_vr_add
-        dis_debug_copy
 )
 
-# Compile each shader
-set(DIS_SPV_FILES)
+set(DIS_SHADER_HEADERS)
 foreach(SHADER ${DIS_SHADERS})
+    set(VAR ${SHADER}_comp)
     set(SRC ${DIS_SHADER_DIR}/${SHADER}.comp)
-    set(DST ${DIS_SHADER_BUILD_DIR}/${SHADER}.spv)
-
+    set(SPV ${DIS_SHADER_OUT_DIR}/${VAR}.spv)
+    set(HDR ${DIS_SHADER_OUT_DIR}/${VAR}.spv.h)
     add_custom_command(
-            OUTPUT ${DST}
-            COMMAND ${GLSLC_EXECUTABLE} -fshader-stage=compute ${SRC} -o ${DST}
-            DEPENDS ${SRC}
-            COMMENT "Compiling ${SHADER}.comp → ${SHADER}.spv"
+            OUTPUT ${HDR}
+            COMMAND ${GLSLC_EXECUTABLE} --target-env=vulkan1.1 -O ${SRC} -o ${SPV}
+            COMMAND ${CMAKE_COMMAND} -DINPUT_FILE=${SPV} -DOUTPUT_FILE=${HDR} -DVAR_NAME=${VAR}
+                    -P ${DIS_DIR}/bin2c.cmake
+            DEPENDS ${SRC} ${DIS_DIR}/bin2c.cmake
+            COMMENT "Compiling DIS shader ${SHADER}.comp"
             VERBATIM
     )
-    list(APPEND DIS_SPV_FILES ${DST})
+    list(APPEND DIS_SHADER_HEADERS ${HDR})
 endforeach()
+add_custom_target(dis_shaders DEPENDS ${DIS_SHADER_HEADERS})
 
-# Custom target to compile all shaders
-add_custom_target(dis_shaders ALL DEPENDS ${DIS_SPV_FILES})
-
-# ── DIS Vulkan library ──
 add_library(dis_vulkan STATIC
         dis/dis.cpp
         dis/dis_jni.cpp
+        dis/src/vkr_dis.c
+        dis/src/dis_qcom_me.c
+        dis/src/vk_dispatch.c
 )
+add_dependencies(dis_vulkan dis_shaders)
 
+target_compile_definitions(dis_vulkan PRIVATE VK_USE_PLATFORM_ANDROID_KHR)
 target_include_directories(dis_vulkan PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${DIS_DIR}
+        ${DIS_DIR}/include
+        ${CMAKE_CURRENT_BINARY_DIR}/dis_gen
 )
-
 target_link_libraries(dis_vulkan
-        vulkan
         android
         EGL
         GLESv2
         log
-)
-
-# Make sure shaders are compiled before the library
-add_dependencies(dis_vulkan dis_shaders)
-
-# ── Copy .spv files to assets ──
-# After build, copy spv files to assets/shaders/
-add_custom_command(TARGET dis_vulkan POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory
-        ${CMAKE_SOURCE_DIR}/../../../src/main/assets/shaders
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${DIS_SHADER_BUILD_DIR}
-        ${CMAKE_SOURCE_DIR}/../../../src/main/assets/shaders
-        COMMENT "Copying SPIR-V shaders to assets"
+        dl
 )
 
 add_library(winlator SHARED

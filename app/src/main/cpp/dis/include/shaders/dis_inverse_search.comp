@@ -11,7 +11,10 @@
 precision highp float;
 precision highp int;
 
-#define DIS_INVERSE_ITERS 8
+// Gauss-Newton iterations per patch. The loop already breaks once the SSD stops
+// improving, so this only caps the hard cases; six reaches the same fixpoint
+// there while cutting a quarter off the heaviest loop in the search.
+#define DIS_INVERSE_ITERS 6
 
 #define DIS_MAX_MATCH_RMS 36.0
 
@@ -58,13 +61,19 @@ layout(set = 0, binding = 0) uniform sampler2D lastLumaMap;
 layout(set = 0, binding = 1) uniform sampler2D nextLumaMap;
 layout(set = 0, binding = 2) uniform sampler2D lastGradientMap;
 layout(set = 0, binding = 3) uniform sampler2D flowMap;
-layout(set = 0, binding = 4) uniform sampler2D lastFlowMap;
+// Motion hint from a hardware estimator (GL_QCOM_motion_estimation), one vector per block, in
+// normalised uv units; read only on the level named by hintLevel. A component beyond HINT_INVALID
+// marks a block the estimator had nothing for.
+layout(set = 0, binding = 4) uniform sampler2D hintFlowMap;
 layout(set = 0, binding = 5, rgba32f) uniform image2D sparseFlowMap;
 
 layout(push_constant) uniform PC {
     int level;
     int coarseLevel;
+    int hintLevel;
 } pc;
+
+#define HINT_INVALID 1.0e6
 
 float uluminance(vec3 c) {
     return (0.299 * c.x + 0.587 * c.y + 0.114 * c.z) * 255.0;
@@ -80,36 +89,50 @@ mat2 myInverse(mat2 m) {
     return mat2(m[1][1], -m[0][1], -m[1][0], m[0][0]) / det;
 }
 
+// The reference patches of one workgroup. Patches sit every 3 texels and are 8 wide, so the
+// 8x8 patches of a workgroup cover a 29x29 block and overlap almost entirely; the block is loaded
+// once, cooperatively, instead of every thread keeping its own 64 luminance values and 64
+// gradients in private arrays - which is what the register file cannot hold on mobile GPUs, and
+// the spill to memory was the single most expensive thing in the flow chain. The values are the
+// same texels as before (texelFetch at the same clamped coordinates), so the search is unchanged.
+#define TILE 29
+shared float sLuma[TILE * TILE];
+shared vec2 sGrad[TILE * TILE];
+
+#define REF(i, j) sLuma[(lp.y + (j)) * TILE + lp.x + (i)]
+#define GRAD(i, j) sGrad[(lp.y + (j)) * TILE + lp.x + (i)]
+
 void main() {
     const float patchSize = 8.0;
 
     ivec2 pixSparse = ivec2(gl_GlobalInvocationID.xy);
     ivec2 sparseSize = imageSize(sparseFlowMap);
-    if (pixSparse.x >= sparseSize.x || pixSparse.y >= sparseSize.y) return;
-
-    ivec2 pix = pixSparse * 3;
     ivec2 denseSize = textureSize(lastLumaMap, 0);
     ivec2 denseMax = denseSize - 1;
 
-    float lastImageData[64];
-    vec2 gradData[64];
+    ivec2 tileOrigin = ivec2(gl_WorkGroupID.xy) * 24;
+    for (int k = int(gl_LocalInvocationIndex); k < TILE * TILE; k += 64) {
+        ivec2 q = clamp(tileOrigin + ivec2(k % TILE, k / TILE), ivec2(0), denseMax);
+        sLuma[k] = texelFetch(lastLumaMap, q, 0).x;
+        sGrad[k] = -texelFetch(lastGradientMap, q, 0).xy;
+    }
+    barrier();
+
+    if (pixSparse.x >= sparseSize.x || pixSparse.y >= sparseSize.y) return;
+
+    ivec2 pix = pixSparse * 3;
+    ivec2 lp = ivec2(gl_LocalInvocationID.xy) * 3;
 
     vec2 gradSum = vec2(0.0);
     mat2 H = mat2(0.0);
 
     for (int i = 0; i < 8; i++) {
         for (int j = 0; j < 8; j++) {
-            ivec2 q = clamp(pix + ivec2(i, j), ivec2(0), denseMax);
-            gradData[i * 8 + j] = -texelFetch(lastGradientMap, q, 0).xy;
-
-            H[0][0] += gradData[i * 8 + j].x * gradData[i * 8 + j].x;
-            H[1][1] += gradData[i * 8 + j].y * gradData[i * 8 + j].y;
-            H[0][1] += gradData[i * 8 + j].x * gradData[i * 8 + j].y;
-
-            lastImageData[i * 8 + j] =
-                texelFetch(lastLumaMap, q, 0).x;
-
-            gradSum += gradData[i * 8 + j];
+            vec2 g = GRAD(i, j);
+            H[0][0] += g.x * g.x;
+            H[1][1] += g.y * g.y;
+            H[0][1] += g.x * g.y;
+            gradSum += g;
         }
     }
 
@@ -129,10 +152,43 @@ void main() {
         flow = cf.xy * vec2(denseSize);
         if (any(isnan(flow)) || any(isinf(flow))) flow = vec2(0.0);
     }
-    vec2 initialFlow = flow;
-
     vec2 invImageSize = 1.0 / vec2(denseSize);
     const float N = 64.0;
+
+    // A second starting point from the hardware estimator. Both candidates are scored on the
+    // patch with the same mean-normalised SSD the search minimises, and the search starts from
+    // the better one. The coarse level still covers what the estimator cannot: its search range
+    // is a few dozen pixels, and past that its vector is garbage that simply loses here.
+    if (pc.level == pc.hintLevel) {
+        vec2 hintSize = vec2(textureSize(hintFlowMap, 0));
+        ivec2 hp = clamp(ivec2((vec2(pix) + 4.0) * hintSize / vec2(denseSize)),
+                         ivec2(0), ivec2(hintSize) - 1);
+        vec2 hint = texelFetch(hintFlowMap, hp, 0).xy;
+        if (all(lessThan(abs(hint), vec2(HINT_INVALID * 0.5)))) {
+            hint *= vec2(denseSize);
+            vec2 cand[2] = vec2[2](flow, hint);
+            float best = 1e30;
+            for (int c = 0; c < 2; c++) {
+                vec2 o = clamp(vec2(pix) + cand[c], vec2(0.0), vec2(denseSize) - patchSize);
+                float s = 0.0;
+                float s2 = 0.0;
+                for (int i = 0; i < 8; i++) {
+                    for (int j = 0; j < 8; j++) {
+                        vec2 tc = (o + vec2(i, j) + 0.5) * invImageSize;
+                        float diff = textureLod(nextLumaMap, tc, 0.0).x - REF(i, j);
+                        s += diff;
+                        s2 += diff * diff;
+                    }
+                }
+                float ssd = s2 - s * s / N;
+                if (ssd < best) {
+                    best = ssd;
+                    flow = cand[c];
+                }
+            }
+        }
+    }
+    vec2 initialFlow = flow;
 
     const float N_INV = 1.0 / N;
     float prevSSD = 1e10;
@@ -146,10 +202,10 @@ void main() {
             for (int j = 0; j < 8; j++) {
                 vec2 tc = (warpOrigin + vec2(i, j) + 0.5) * invImageSize;
                 float warped = textureLod(nextLumaMap, tc, 0.0).x;
-                float diff = warped - lastImageData[i * 8 + j];
+                float diff = warped - REF(i, j);
                 sd += diff;
                 sd2 += diff * diff;
-                sIg += gradData[i * 8 + j] * diff;
+                sIg += GRAD(i, j) * diff;
             }
         }
 
@@ -186,7 +242,7 @@ void main() {
         for (int i = 0; i < 8; i++) {
             for (int j = 0; j < 8; j++) {
                 vec2 tc = (vec2(pix) + vec2(i, j) + 0.5) * invImageSize;
-                float diff = textureLod(nextLumaMap, tc, 0.0).x - lastImageData[i * 8 + j];
+                float diff = textureLod(nextLumaMap, tc, 0.0).x - REF(i, j);
                 zsd += diff;
                 zsd2 += diff * diff;
             }

@@ -20,7 +20,10 @@ layout(set = 0, binding = 3) uniform sampler2D dW;
 layout(set = 0, binding = 4) uniform sampler2D flowDense;
 layout(set = 0, binding = 5) uniform sampler2D wt;
 layout(set = 0, binding = 8, rgba32f) uniform image2D A;
-layout(set = 0, binding = 9, rg32f) uniform image2D B;
+// A.w and B.zw carry the smoothness weights the SOR reads at this cell, so it needs no weight
+// fetches of its own: the centre weight, and the left and up ones already zeroed at the frame
+// edge as the SOR's own "p.x > 0 ? ... : 0" did.
+layout(set = 0, binding = 9, rgba32f) uniform image2D B;
 
 layout(push_constant) uniform PC {
     float delta2;
@@ -80,6 +83,6 @@ void main() {
     if (p.y < mx.y) { addA += wc; addB += wc * (Wd - W); }
     if (p.y > 0)    { addA += wu; addB -= wu * (W - Wu); }
 
-    imageStore(A, p, vec4(a11 + addA, a12, a22 + addA, 0.0));
-    imageStore(B, p, vec4(vec2(b1, b2) + addB, 0.0, 0.0));
+    imageStore(A, p, vec4(a11 + addA, a12, a22 + addA, wc));
+    imageStore(B, p, vec4(vec2(b1, b2) + addB, p.x > 0 ? wl : 0.0, p.y > 0 ? wu : 0.0));
 }
