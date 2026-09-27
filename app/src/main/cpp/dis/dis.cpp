@@ -182,9 +182,18 @@ bool disVulkanInit(DisVulkanContext* ctx, EGLDisplay eglDisplay) {
         devExt[devExtCount++] = VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME;
     }
 
+    // A game that keeps the GPU busy would otherwise delay every generated frame behind its own
+    // work, so the queue asks for a high global priority where the driver allows it.
+    const bool haveGlobalPriority = hasDeviceExtension(ctx->physicalDevice, VK_EXT_GLOBAL_PRIORITY_EXTENSION_NAME);
+    if (haveGlobalPriority) devExt[devExtCount++] = VK_EXT_GLOBAL_PRIORITY_EXTENSION_NAME;
+
     float queuePriority = 1.0f;
+    VkDeviceQueueGlobalPriorityCreateInfoEXT qprio = {};
+    qprio.sType          = VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_EXT;
+    qprio.globalPriority = VK_QUEUE_GLOBAL_PRIORITY_HIGH_EXT;
     VkDeviceQueueCreateInfo qci = {};
     qci.sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    qci.pNext            = haveGlobalPriority ? &qprio : nullptr;
     qci.queueFamilyIndex = (uint32_t)ctx->queueFamily;
     qci.queueCount       = 1;
     qci.pQueuePriorities = &queuePriority;
@@ -196,7 +205,18 @@ bool disVulkanInit(DisVulkanContext* ctx, EGLDisplay eglDisplay) {
     dci.enabledExtensionCount   = devExtCount;
     dci.ppEnabledExtensionNames = devExt;
     dci.pEnabledFeatures        = &enable;
-    if (vkCreateDevice(ctx->physicalDevice, &dci, nullptr, &ctx->device) != VK_SUCCESS) {
+    VkResult created = vkCreateDevice(ctx->physicalDevice, &dci, nullptr, &ctx->device);
+    if (created != VK_SUCCESS && haveGlobalPriority) {
+        // Not permitted (or not supported for this family): fall back to the default priority.
+        // The extension was added last, so dropping the count drops it.
+        LOGI("Vulkan queue priority: default (high refused: %d)", (int)created);
+        qci.pNext = nullptr;
+        dci.enabledExtensionCount = --devExtCount;
+        created = vkCreateDevice(ctx->physicalDevice, &dci, nullptr, &ctx->device);
+    } else if (created == VK_SUCCESS) {
+        LOGI("Vulkan queue priority: %s", haveGlobalPriority ? "high" : "default");
+    }
+    if (created != VK_SUCCESS) {
         LOGE("vkCreateDevice failed");
         destroyDevice(ctx);
         return false;

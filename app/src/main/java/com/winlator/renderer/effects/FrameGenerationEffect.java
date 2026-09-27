@@ -106,6 +106,9 @@ public class FrameGenerationEffect extends Effect {
     private long lastDrawNs = 0;
     private long drawIntervalNs = 0;
     private long lastShownStep = -1;
+    // Rates logged now and then: draws of the screen, real frames pushed, frames generated.
+    private long pacedStatsStartNs = 0;
+    private int pacedDraws = 0, pacedReal = 0, pacedGenerated = 0;
 
     // DIS works on frames at the X screen's size (the container resolution), drawn there by the
     // renderer; on the surface they cover only the scene's viewport, disRect (x, y, w, h in UV).
@@ -714,8 +717,22 @@ public class FrameGenerationEffect extends Effect {
         }
         lastDrawNs = now;
 
+        pacedDraws++;
+        if (pacedStatsStartNs == 0) pacedStatsStartNs = now;
+        if (now - pacedStatsStartNs >= 5 * NANOS_PER_SECOND) {
+            double secs = (now - pacedStatsStartNs) / (double) NANOS_PER_SECOND;
+            Log.i(TAG, String.format("Paced: draws %.1f/s, real %.1f/s, generated %.1f/s, pair %.1f ms, draw %.1f ms, step %.1f ms",
+                    pacedDraws / secs, pacedReal / secs, pacedGenerated / secs,
+                    realFrameEventIntervalNs / (double) NANOS_PER_MILLISECOND,
+                    drawIntervalNs / (double) NANOS_PER_MILLISECOND,
+                    currentTargetFrameIntervalNs / (double) NANOS_PER_MILLISECOND));
+            pacedStatsStartNs = now;
+            pacedDraws = pacedReal = pacedGenerated = 0;
+        }
+
         if (realFramePending) {
             realFramePending = false;
+            pacedReal++;
             pushRealFrameToDis(width, height);
             pairStartNs = now;
             lastShownStep = -1;
@@ -746,6 +763,7 @@ public class FrameGenerationEffect extends Effect {
             lastShownStep = step;
             blendFactor = Math.min(1.0f, (float) (step * stepNs) / pairNs);
             disFrameReady = disVulkan.generate(blendFactor);
+            pacedGenerated++;
             LogString(String.format("Paced: step=%d, blend=%.3f, pair=%.1fms, vsync=%.1fms",
                     step, blendFactor, pairNs / (double) NANOS_PER_MILLISECOND, vsyncNs / (double) NANOS_PER_MILLISECOND));
         }
