@@ -126,7 +126,8 @@ public class DIS {
 
     /**
      * Hands the frame just copied into the prev (first frame) or curr texture to DIS, which
-     * computes the flow from the previous real frame to it. GLES must have finished the copy.
+     * computes the flow from the previous real frame to it. DIS orders itself after the GLES copy
+     * on the GPU, so the copy does not have to be finished first.
      * {@code generations} is how many frames will be generated for this pair (1..3).
      */
     public boolean pushFrame(boolean fromPrev, int generations) {

@@ -517,13 +517,12 @@ public class FrameGenerationEffect extends Effect {
                 if (disVulkanReady) {
                     disVulkan.ensureTextures(width, height);
 
-                    // Every captured real frame goes to DIS as soon as GLES has written it, and
-                    // DIS computes the flow of the pair right there - once per real frame, not
-                    // once per generated one.
+                    // Every captured real frame goes to DIS right after the copy, and DIS computes the
+                    // flow of the pair there - once per real frame, not once per generated one. DIS
+                    // orders itself after the copy on the GPU, so nothing here waits for it.
                     int generations = Math.max(1, Math.min(3, fpsMultiplier - 1));
                     if (!hasFirstFrame) {
                         disVulkan.copyFrameToPrev();
-                        GLES20.glFinish();
                         disVulkan.pushFrame(true, generations);
                         texturePrev = disVulkan.getPrevGlTexture();
                         textureCurr = disVulkan.getCurrGlTexture();
@@ -531,7 +530,6 @@ public class FrameGenerationEffect extends Effect {
                         waitingForSecondFrame = true;
                     } else if (waitingForSecondFrame) {
                         disVulkan.copyFrameToCurr();
-                        GLES20.glFinish();
                         disVulkan.pushFrame(false, generations);
                         texturePrev = disVulkan.getPrevGlTexture();
                         textureCurr = disVulkan.getCurrGlTexture();
@@ -540,7 +538,6 @@ public class FrameGenerationEffect extends Effect {
                     } else {
                         disVulkan.swapPrevCurr();
                         disVulkan.copyFrameToCurr();
-                        GLES20.glFinish();
                         disVulkan.pushFrame(false, generations);
                         texturePrev = disVulkan.getPrevGlTexture();
                         textureCurr = disVulkan.getCurrGlTexture();

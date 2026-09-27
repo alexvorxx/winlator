@@ -5,6 +5,10 @@
 // Frames reach DIS through AHardwareBuffers shared between GLES and Vulkan: the effect copies
 // each captured real frame into one, DIS computes the optical flow of the pair once, and every
 // generated frame is rendered by DIS into another AHB that the effect then draws.
+//
+// Both directions are ordered on the GPU with native fences (EGL_ANDROID_native_fence_sync on the
+// GLES side, VK_KHR_external_semaphore_fd on the Vulkan side), so the GL thread never waits for
+// either API to finish. Without those extensions it falls back to finishing each side on the CPU.
 
 #include "vkr_dis.h"
 
@@ -38,6 +42,18 @@ struct AhbTexture {
     VkFormat         format    = VK_FORMAT_UNDEFINED;
 };
 
+// One in-flight Vulkan submission: its command buffer, the fence that says it is done, the
+// semaphore it waits on (a GLES fence imported for this submit) and the one it signals (exported
+// to GLES).
+#define DIS_SUBMIT_RING 4
+struct DisSubmitSlot {
+    VkCommandBuffer cmd       = VK_NULL_HANDLE;
+    VkFence         fence     = VK_NULL_HANDLE;
+    VkSemaphore     waitSem   = VK_NULL_HANDLE;
+    VkSemaphore     signalSem = VK_NULL_HANDLE;
+    bool            submitted = false;
+};
+
 // ── Vulkan context ──
 struct DisVulkanContext {
     VkInstance       instance       = VK_NULL_HANDLE;
@@ -45,9 +61,10 @@ struct DisVulkanContext {
     VkDevice         device         = VK_NULL_HANDLE;
     VkQueue          queue          = VK_NULL_HANDLE;
     VkCommandPool    cmdPool        = VK_NULL_HANDLE;
-    VkCommandBuffer  frameCmd       = VK_NULL_HANDLE;
-    VkFence          frameFence     = VK_NULL_HANDLE;
     int              queueFamily    = -1;
+
+    DisSubmitSlot    slots[DIS_SUBMIT_RING];
+    uint32_t         nextSlot = 0;
 
     // EGL extensions (loaded at runtime)
     EGLDisplay eglDisplay = EGL_NO_DISPLAY;
@@ -56,12 +73,25 @@ struct DisVulkanContext {
     PFN_eglGetNativeClientBufferANDROID eglGetNativeClientBufferANDROID = nullptr;
     PFN_glEGLImageTargetTexture2DOES    glEGLImageTargetTexture2DOES = nullptr;
 
+    // GPU-side synchronisation between the two APIs; all set, or asyncSync is false.
+    bool asyncSync = false;
+    PFNEGLCREATESYNCKHRPROC            eglCreateSyncKHR = nullptr;
+    PFNEGLDESTROYSYNCKHRPROC           eglDestroySyncKHR = nullptr;
+    PFNEGLWAITSYNCKHRPROC              eglWaitSyncKHR = nullptr;
+    PFNEGLDUPNATIVEFENCEFDANDROIDPROC  eglDupNativeFenceFDANDROID = nullptr;
+    PFN_vkImportSemaphoreFdKHR         importSemaphoreFd = nullptr;
+    PFN_vkGetSemaphoreFdKHR            getSemaphoreFd = nullptr;
+
     // The frame generator and the frame size it was last prepared for.
     VkrDis*  dis = nullptr;
     uint32_t minSide = 180;
     int      frameWidth = 0;
     int      frameHeight = 0;
     bool     debugFlow = false;
+
+    // CPU time spent in the two calls, logged now and then.
+    double   pushMs = 0.0, generateMs = 0.0;
+    uint32_t pushCount = 0, generateCount = 0;
 
     bool initialized = false;
 };
@@ -78,12 +108,13 @@ GLuint disVulkanGetGlTexture(const AhbTexture* tex);
 // Flow resolution: pixels on the frame's shorter side.
 void disVulkanSetMinSide(DisVulkanContext* ctx, uint32_t minSide);
 
-// A new real frame is in `frame` (GLES has finished writing it). Computes the flow from the
-// previous real frame to this one; `generations` is how many frames will be generated for the
-// pair (1..3), which sizes the refinement budget.
+// A new real frame has just been written into `frame` by GLES (the commands may still be in
+// flight). Computes the flow from the previous real frame to this one; `generations` is how many
+// frames will be generated for the pair (1..3), which sizes the refinement budget.
 bool disVulkanPushFrame(DisVulkanContext* ctx, AhbTexture* frame, int generations);
 
-// Renders the frame at time t in [0, 1] between the last two real frames into `out`.
+// Renders the frame at time t in [0, 1] between the last two real frames into `out`. GLES
+// commands issued after this call see the finished frame.
 bool disVulkanGenerate(DisVulkanContext* ctx, AhbTexture* out, float t);
 
 void disVulkanSetDebugFlow(DisVulkanContext* ctx, bool enabled);
