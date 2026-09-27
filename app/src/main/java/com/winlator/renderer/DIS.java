@@ -19,9 +19,9 @@ public class DIS {
     public static final int FMT_RGBA16F   = 1;
 
     // Quality presets: flow resolution, in pixels on the frame's shorter side.
-    public static final int PRESET_FAST_MIN_SIDE     = 180;
-    public static final int PRESET_BALANCED_MIN_SIDE = 252;
-    public static final int PRESET_QUALITY_MIN_SIDE  = 360;
+    public static final int PRESET_FAST_MIN_SIDE     = 128;
+    public static final int PRESET_BALANCED_MIN_SIDE = 180;
+    public static final int PRESET_QUALITY_MIN_SIDE  = 252;
 
     private long prevAhbPtr = 0;
     private long currAhbPtr = 0;
