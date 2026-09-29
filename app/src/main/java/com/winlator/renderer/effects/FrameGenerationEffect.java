@@ -5,9 +5,11 @@ import android.opengl.GLES20;
 import android.opengl.GLES30;
 import android.util.Log;
 
+import com.winlator.XrActivity;
 import com.winlator.renderer.DIS;
 import com.winlator.renderer.EffectComposer;
 import com.winlator.renderer.GLRenderer;
+import com.winlator.renderer.ViewTransformation;
 import com.winlator.renderer.material.ScreenMaterial;
 import com.winlator.renderer.material.ShaderMaterial;
 
@@ -94,6 +96,38 @@ public class FrameGenerationEffect extends Effect {
     private DIS disVulkan = null;
     // A generated frame rendered by DIS is waiting in its out texture for the next draw.
     private boolean disFrameReady = false;
+
+    // DIS pacing by the game's own frames (see prepareFramePaced).
+    private boolean paceByRealFrames = false;
+    private boolean realFramePending = false;     // presented, not captured yet
+    private long realFramePendingNs = 0;
+    private long lastRealFrameEventNs = 0;
+    private long realFrameEventIntervalNs = 0;    // mean time between the game's frames
+    private long realFrameJitterNs = 0;           // mean deviation from it
+    // Frames captured into DIS's queue textures but not handed to it yet, oldest first.
+    private final long[] queuedFrameNs = new long[DIS.QUEUE_LENGTH];
+    private int queuedFrames = 0;
+    private long pairPrevNs = 0, pairCurrNs = 0;  // when the two frames DIS holds were presented
+    private int framesPushed = 0;                 // counts up to 2
+    private long playDelayNs = 0;                 // the frames shown are this far behind the game
+    private long lateMarginNs = 0;                // learned from late frames, see prepareFramePaced
+    private long deliveryLagNs = 0;               // mean time from present to capture, logged
+    private boolean holdingLate = false;
+    private long lastGenerateNs = 0;
+    private float lastGeneratedT = -1.0f;
+    private long lastDrawNs = 0;
+    private long drawIntervalNs = 0;
+    // Rates logged now and then: draws of the screen, real frames pushed, frames generated,
+    // times the next frame came late (held) or the queue overflowed (skipped ahead).
+    private long pacedStatsStartNs = 0;
+    private int pacedDraws = 0, pacedReal = 0, pacedGenerated = 0, pacedLate = 0, pacedSkipped = 0;
+
+    // DIS works on frames at the X screen's size (the container resolution), drawn there by the
+    // renderer; on the surface they cover only the scene's viewport, disRect (x, y, w, h in UV).
+    private boolean disAtScreenSize = false;
+    private int disCaptureFbo = -1;
+    private final float[] disRect = {0.0f, 0.0f, 1.0f, 1.0f};
+    private int uDisRectLoc = -1;
 
     // Uniform locations
     public int uIsEnabledLoc = -1;
@@ -351,13 +385,14 @@ public class FrameGenerationEffect extends Effect {
     }
 
     private void clearHistory() {
-        if (textureHistory != -1) {
+        // The prev/curr textures DIS hands out belong to its AHBs and are deleted with them.
+        if (textureHistory != -1 && !isDisTexture(textureHistory)) {
             GLES20.glDeleteTextures(1, new int[]{textureHistory}, 0);
         }
-        if (texturePrev != -1) {
+        if (texturePrev != -1 && !isDisTexture(texturePrev)) {
             GLES20.glDeleteTextures(1, new int[]{texturePrev}, 0);
         }
-        if (textureCurr != -1) {
+        if (textureCurr != -1 && !isDisTexture(textureCurr)) {
             GLES20.glDeleteTextures(1, new int[]{textureCurr}, 0);
         }
         if (capturedRealFrame != -1) {
@@ -369,10 +404,38 @@ public class FrameGenerationEffect extends Effect {
         capturedRealFrame = -1;
     }
 
+    /**
+     * The game presented a new frame at {@code presentedNs} (System.nanoTime()). Called on the GL
+     * thread before the next draw, which captures it; with DIS this switches the effect to pacing
+     * by these events.
+     */
+    public void onRealFrame(long presentedNs) {
+        if (lastRealFrameEventNs != 0) {
+            long dt = presentedNs - lastRealFrameEventNs;
+            if (dt >= 2 * NANOS_PER_MILLISECOND && dt <= 250 * NANOS_PER_MILLISECOND) {
+                if (realFrameEventIntervalNs == 0) {
+                    realFrameEventIntervalNs = dt;
+                } else {
+                    long deviation = Math.abs(dt - realFrameEventIntervalNs);
+                    realFrameEventIntervalNs += (dt - realFrameEventIntervalNs) / 8;
+                    realFrameJitterNs += (deviation - realFrameJitterNs) / 8;
+                }
+            }
+        }
+        lastRealFrameEventNs = presentedNs;
+        realFramePending = true;
+        realFramePendingNs = presentedNs;
+        paceByRealFrames = true;
+    }
+
     public int getFrameToDisplay() {
         if (!isEnabled) {
             LogString("Generation not enabled, showing real frame");
             return 0;
+        }
+
+        if (paceByRealFrames && disVulkanReady) {
+            return isReadyForGeneration() ? 1 : 0;
         }
 
         int requiredDisplayCount = (currentDisplayFrameType == 0) ?
@@ -486,6 +549,11 @@ public class FrameGenerationEffect extends Effect {
             qcomInitialized = true;
         }
 
+        if (paceByRealFrames && disVulkanReady) {
+            prepareFramePaced(width, height, currentTimeNs);
+            return;
+        }
+
         if (sequence == 0) {
             // Real frame
             currentRealFrameIndex++;
@@ -515,36 +583,7 @@ public class FrameGenerationEffect extends Effect {
                 }
 
                 if (disVulkanReady) {
-                    disVulkan.ensureTextures(width, height);
-
-                    // Every captured real frame goes to DIS as soon as GLES has written it, and
-                    // DIS computes the flow of the pair right there - once per real frame, not
-                    // once per generated one.
-                    int generations = Math.max(1, Math.min(3, fpsMultiplier - 1));
-                    if (!hasFirstFrame) {
-                        disVulkan.copyFrameToPrev();
-                        GLES20.glFinish();
-                        disVulkan.pushFrame(true, generations);
-                        texturePrev = disVulkan.getPrevGlTexture();
-                        textureCurr = disVulkan.getCurrGlTexture();
-                        hasFirstFrame = true;
-                        waitingForSecondFrame = true;
-                    } else if (waitingForSecondFrame) {
-                        disVulkan.copyFrameToCurr();
-                        GLES20.glFinish();
-                        disVulkan.pushFrame(false, generations);
-                        texturePrev = disVulkan.getPrevGlTexture();
-                        textureCurr = disVulkan.getCurrGlTexture();
-                        hasSecondFrame = true;
-                        waitingForSecondFrame = false;
-                    } else {
-                        disVulkan.swapPrevCurr();
-                        disVulkan.copyFrameToCurr();
-                        GLES20.glFinish();
-                        disVulkan.pushFrame(false, generations);
-                        texturePrev = disVulkan.getPrevGlTexture();
-                        textureCurr = disVulkan.getCurrGlTexture();
-                    }
+                    pushRealFrameToDis(width, height);
                 } else {
                     int newTextureId = captureCurrentFrameSimple(width, height);
                     if (newTextureId == -1) return;
@@ -652,6 +691,226 @@ public class FrameGenerationEffect extends Effect {
         }
     }
 
+    // Copies the frame just drawn into the bound framebuffer to DIS, which computes the flow from
+    // the previous real frame to it - once per real frame, not once per generated one. DIS orders
+    // itself after the copy on the GPU, so nothing here waits for it.
+    private void pushRealFrameToDis(int width, int height) {
+        ensureDisTextures(width, height);
+        int generations = disGenerations();
+        if (!hasFirstFrame) {
+            captureFrameForDis(disVulkan.getPrevGlTexture());
+            disVulkan.pushFrame(true, generations);
+            hasFirstFrame = true;
+            waitingForSecondFrame = true;
+        } else if (waitingForSecondFrame) {
+            captureFrameForDis(disVulkan.getCurrGlTexture());
+            disVulkan.pushFrame(false, generations);
+            hasSecondFrame = true;
+            waitingForSecondFrame = false;
+        } else {
+            disVulkan.swapPrevCurr();
+            captureFrameForDis(disVulkan.getCurrGlTexture());
+            disVulkan.pushFrame(false, generations);
+        }
+        texturePrev = disVulkan.getPrevGlTexture();
+        textureCurr = disVulkan.getCurrGlTexture();
+    }
+
+    private void ensureDisTextures(int width, int height) {
+        // Outside XR the frame is drawn again at the container resolution rather than copied from
+        // the surface: no resampling, and far fewer pixels to copy, warp and blend.
+        disAtScreenSize = !XrActivity.isEnabled(null);
+        if (disAtScreenSize) {
+            disVulkan.ensureTextures(renderer.getScreenWidth(), renderer.getScreenHeight());
+        } else {
+            disVulkan.ensureTextures(width, height);
+        }
+    }
+
+    private int disGenerations() {
+        return Math.max(1, Math.min(3, fpsMultiplier - 1));
+    }
+
+    // Hands the oldest queued frame to DIS: the pair becomes (current, that frame).
+    private void pushQueuedFrame() {
+        long frameNs = queuedFrameNs[0];
+        long meanNs = realFrameEventIntervalNs > 0 ? realFrameEventIntervalNs : currentRealFrameIntervalNs;
+        // After a stall (loading, pause) the pair would span the whole gap and play it back as a
+        // slow morph; treat the older frame as if it came one frame interval earlier instead.
+        if (framesPushed > 0 && frameNs - pairCurrNs > Math.max(4 * meanNs, 150 * NANOS_PER_MILLISECOND)) {
+            pairCurrNs = frameNs - meanNs;
+        }
+        disVulkan.pushQueued(disGenerations());
+        pairPrevNs = pairCurrNs;
+        pairCurrNs = frameNs;
+        queuedFrames--;
+        System.arraycopy(queuedFrameNs, 1, queuedFrameNs, 0, queuedFrames);
+        if (framesPushed < 2) framesPushed++;
+        // Every frame that is on time gives a little of the learned margin back.
+        if (framesPushed >= 2 && !holdingLate) {
+            lateMarginNs = Math.max(0, lateMarginNs - NANOS_PER_MILLISECOND / 20);
+        }
+
+        texturePrev = disVulkan.getPrevGlTexture();
+        textureCurr = disVulkan.getCurrGlTexture();
+        hasFirstFrame = true;
+        hasSecondFrame = framesPushed >= 2;
+        waitingForSecondFrame = !hasSecondFrame;
+        lastGeneratedT = -1.0f;
+    }
+
+    // Paced by the game's own frames, like a video player: what is shown runs on a clock
+    // playDelayNs behind the times the game presented its frames, and each shown frame is DIS's
+    // interpolation at that clock between the two real frames around it. A frame the game presents
+    // waits captured in a short queue until the clock reaches the frame before it, so frames that
+    // come a little early or late do not make the motion jump or stop.
+    //
+    // The delay follows one frame interval plus twice the jitter of the game's frame times. A frame
+    // that comes later than that holds the picture on the last one and lengthens the delay; the
+    // delay then eases back by at most half a millisecond per draw, which is not visible.
+    private void prepareFramePaced(int width, int height, long now) {
+        if (lastDrawNs != 0) {
+            long dt = now - lastDrawNs;
+            if (dt >= 2 * NANOS_PER_MILLISECOND && dt <= 50 * NANOS_PER_MILLISECOND) {
+                drawIntervalNs = drawIntervalNs == 0 ? dt : (drawIntervalNs * 7 + dt) / 8;
+            }
+        }
+        lastDrawNs = now;
+
+        long meanNs = realFrameEventIntervalNs > 0 ? realFrameEventIntervalNs : currentRealFrameIntervalNs;
+
+        pacedDraws++;
+        if (pacedStatsStartNs == 0) pacedStatsStartNs = now;
+        if (now - pacedStatsStartNs >= 5 * NANOS_PER_SECOND) {
+            double secs = (now - pacedStatsStartNs) / (double) NANOS_PER_SECOND;
+            Log.i(TAG, String.format("Paced: draws %.1f/s, real %.1f/s, generated %.1f/s, frame %.1f ms +- %.1f, lag %.1f ms, delay %.1f ms (margin %.1f), late %d, skipped %d",
+                    pacedDraws / secs, pacedReal / secs, pacedGenerated / secs,
+                    meanNs / (double) NANOS_PER_MILLISECOND,
+                    realFrameJitterNs / (double) NANOS_PER_MILLISECOND,
+                    deliveryLagNs / (double) NANOS_PER_MILLISECOND,
+                    playDelayNs / (double) NANOS_PER_MILLISECOND,
+                    lateMarginNs / (double) NANOS_PER_MILLISECOND,
+                    pacedLate, pacedSkipped));
+            pacedStatsStartNs = now;
+            pacedDraws = pacedReal = pacedGenerated = pacedLate = pacedSkipped = 0;
+        }
+
+        // Capture a newly presented frame into the queue. If the queue is full, the clock has
+        // fallen that many frames behind: hand the oldest over now and skip ahead.
+        if (realFramePending) {
+            realFramePending = false;
+            pacedReal++;
+            ensureDisTextures(width, height);
+            if (queuedFrames == DIS.QUEUE_LENGTH) {
+                pushQueuedFrame();
+                pacedSkipped++;
+            }
+            captureFrameForDis(disVulkan.getQueueGlTexture(queuedFrames));
+            queuedFrameNs[queuedFrames++] = realFramePendingNs;
+            long lagNs = now - realFramePendingNs;
+            if (lagNs >= 0 && lagNs < 250 * NANOS_PER_MILLISECOND) deliveryLagNs += (lagNs - deliveryLagNs) / 8;
+            lastRealFrameTimeNs = now;
+        }
+
+        // The first two frames go to DIS at once; the clock starts on the first of them.
+        while (queuedFrames > 0 && framesPushed < 2) {
+            pushQueuedFrame();
+            if (framesPushed == 2) playDelayNs = now - pairPrevNs;
+        }
+
+        currentSequence = 0;
+        if (framesPushed < 2) {
+            disFrameReady = false;
+            return;
+        }
+
+        // A frame reaches this thread some time after the game presents it (it waits while a draw
+        // is in progress), so the jitter alone does not cover it; the margin learns the rest.
+        long targetDelayNs = Math.min(meanNs + 2 * realFrameJitterNs + NANOS_PER_MILLISECOND + lateMarginNs, 3 * meanNs);
+        long easeNs = NANOS_PER_MILLISECOND / 2;
+        if (playDelayNs > targetDelayNs) playDelayNs -= Math.min(playDelayNs - targetDelayNs, easeNs);
+        else if (playDelayNs < targetDelayNs) playDelayNs += Math.min(targetDelayNs - playDelayNs, easeNs);
+
+        long clockNs = now - playDelayNs;
+        while (queuedFrames > 0 && clockNs >= pairCurrNs) {
+            pushQueuedFrame();
+        }
+        if (clockNs > pairCurrNs) {
+            // The next frame is late: hold on the last one instead of running past it.
+            playDelayNs = now - pairCurrNs;
+            clockNs = pairCurrNs;
+            if (!holdingLate) {
+                pacedLate++;
+                lateMarginNs = Math.min(lateMarginNs + 2 * NANOS_PER_MILLISECOND, meanNs);
+            }
+            holdingLate = true;
+        } else {
+            holdingLate = false;
+        }
+        if (clockNs < pairPrevNs) {
+            // Skipped ahead, or resumed after a stall: start the new pair from its beginning.
+            playDelayNs = now - pairPrevNs;
+            clockNs = pairPrevNs;
+        }
+
+        long spanNs = Math.max(pairCurrNs - pairPrevNs, NANOS_PER_MILLISECOND);
+        float t = Math.min(1.0f, Math.max(0.0f, (float) (clockNs - pairPrevNs) / spanNs));
+
+        // Shown frames step at the configured output rate (initial FPS x multiplier), but never
+        // faster than the display; half a vsync of slack keeps the steps on whole vsyncs.
+        long vsyncNs = drawIntervalNs > 0 ? drawIntervalNs : NANOS_PER_SECOND / Math.max(1, displayRefreshRate);
+        long stepNs = Math.max(vsyncNs, currentTargetFrameIntervalNs);
+        if (now - lastGenerateNs >= stepNs - vsyncNs / 2) {
+            lastGenerateNs = now;
+            if (t != lastGeneratedT) {
+                lastGeneratedT = t;
+                blendFactor = t;
+                disFrameReady = disVulkan.generate(t);
+                pacedGenerated++;
+                LogString(String.format("Paced: t=%.3f, span=%.1fms, delay=%.1fms",
+                        t, spanNs / (double) NANOS_PER_MILLISECOND, playDelayNs / (double) NANOS_PER_MILLISECOND));
+            }
+        }
+        if (disFrameReady) currentSequence = 1;
+    }
+
+    private void captureFrameForDis(int texture) {
+        if (texture == 0) return;
+        if (!disAtScreenSize) {
+            disVulkan.copyFrameTo(texture);
+            return;
+        }
+
+        int[] bound = new int[1];
+        GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, bound, 0);
+        if (disCaptureFbo == -1) {
+            int[] fbo = new int[1];
+            GLES20.glGenFramebuffers(1, fbo, 0);
+            disCaptureFbo = fbo[0];
+        }
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, disCaptureFbo);
+        GLES20.glFramebufferTexture2D(GLES20.GL_FRAMEBUFFER, GLES20.GL_COLOR_ATTACHMENT0,
+                GLES20.GL_TEXTURE_2D, texture, 0);
+        renderer.drawSceneAtScreenSize(disCaptureFbo);
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, bound[0]);
+    }
+
+    private void updateDisRect() {
+        if (!disAtScreenSize || renderer.isFullscreen() || renderer.surfaceWidth <= 0 || renderer.surfaceHeight <= 0) {
+            disRect[0] = 0.0f; disRect[1] = 0.0f; disRect[2] = 1.0f; disRect[3] = 1.0f;
+            return;
+        }
+        ViewTransformation view = renderer.viewTransformation;
+        disRect[0] = (float) view.viewOffsetX / renderer.surfaceWidth;
+        disRect[1] = (float) view.viewOffsetY / renderer.surfaceHeight;
+        disRect[2] = (float) view.viewWidth / renderer.surfaceWidth;
+        disRect[3] = (float) view.viewHeight / renderer.surfaceHeight;
+    }
+
+    private boolean isDisTexture(int texture) {
+        return disVulkan != null && disVulkan.ownsGlTexture(texture);
+    }
+
     public void setupShaderUniforms() {
         ShaderMaterial material = getMaterial();
         if (material == null || material.getProgram() == 0) return;
@@ -672,6 +931,7 @@ public class FrameGenerationEffect extends Effect {
             uUseMotionEstimationLoc = GLES20.glGetUniformLocation(program, "uUseMotionEstimation");
             uUseDISLoc = GLES20.glGetUniformLocation(program, "uUseDIS");
             uUseDISFrameLoc = GLES20.glGetUniformLocation(program, "uUseDISFrame");
+            uDisRectLoc = GLES20.glGetUniformLocation(program, "uDisRect");
         }
 
         // Bind prev texture to unit 1
@@ -770,6 +1030,28 @@ public class FrameGenerationEffect extends Effect {
                     currentWidth, currentHeight, currentSequence, isEnabled));
         }
 
+        // With DIS every frame shown comes from its textures: the generated one, or else the real
+        // frame the effect would show (the previous one; with pacing, the latest once there is a pair).
+        if (disVulkanReady && isEnabled) {
+            int shown = 0;
+            if (disFrameReady && currentSequence == 1) {
+                shown = disVulkan.getOutGlTexture();
+            } else if (hasFirstFrame) {
+                shown = paceByRealFrames ? textureCurr : texturePrev;
+            }
+            if (shown > 0) {
+                GLES20.glActiveTexture(GLES20.GL_TEXTURE4);
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, shown);
+                GLES20.glUniform1i(uMotionTextureLoc, 4);
+                GLES20.glUniform1i(uIsEnabledLoc, 1);
+                if (uUseDISFrameLoc != -1) GLES20.glUniform1i(uUseDISFrameLoc, 1);
+            }
+            updateDisRect();
+        } else {
+            disRect[0] = 0.0f; disRect[1] = 0.0f; disRect[2] = 1.0f; disRect[3] = 1.0f;
+        }
+        if (uDisRectLoc != -1) GLES20.glUniform4f(uDisRectLoc, disRect[0], disRect[1], disRect[2], disRect[3]);
+
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
     }
 
@@ -777,6 +1059,10 @@ public class FrameGenerationEffect extends Effect {
         clearHistory();
         deleteQCOMResources();
 
+        if (disCaptureFbo != -1) {
+            GLES20.glDeleteFramebuffers(1, new int[]{disCaptureFbo}, 0);
+            disCaptureFbo = -1;
+        }
         if (disVulkan != null) {
             disVulkan.cleanup();
             disVulkan = null;
@@ -886,6 +1172,15 @@ public class FrameGenerationEffect extends Effect {
         capturedRealFrame = -1;
         hasCapturedFrame = false;
         skipFirstRealDisplay = false;
+
+        realFramePending = false;
+        disFrameReady = false;
+        queuedFrames = 0;
+        framesPushed = 0;
+        playDelayNs = 0;
+        holdingLate = false;
+        lastGenerateNs = 0;
+        lastGeneratedT = -1.0f;
     }
 
     public boolean isReadyForGeneration() {
@@ -1084,6 +1379,7 @@ public class FrameGenerationEffect extends Effect {
             "uniform int uUseMotionEstimation;",
             "uniform int uUseDIS;",
             "uniform int uUseDISFrame;",
+            "uniform vec4 uDisRect;",
             "uniform float uBlendFactor;",
             "uniform vec2 resolution;",
             "uniform int uUsePostProc;",
@@ -1211,7 +1507,11 @@ public class FrameGenerationEffect extends Effect {
     // Placed at the top of every material's main(): a frame DIS already generated is drawn as is.
     private static final String FRAGMENT_SHADER_DEBUG_MOTION_VISUALIZATION = String.join("\n", new CharSequence[]{
             "    if (uIsEnabled == 1 && uUseDISFrame == 1) {",
-            "        vec4 disFrame = texture2D(uMotionTexture, vUV);",
+            "        vec2 disUV = (vUV - uDisRect.xy) / uDisRect.zw;",
+            "        vec4 disFrame = vec4(0.0);",
+            "        if (all(greaterThanEqual(disUV, vec2(0.0))) && all(lessThanEqual(disUV, vec2(1.0)))) {",
+            "            disFrame = texture2D(uMotionTexture, disUV);",
+            "        }",
             "        if (uUsePostProc == 1) {",
             "            disFrame = simplePostProcessing(disFrame);",
             "        }",

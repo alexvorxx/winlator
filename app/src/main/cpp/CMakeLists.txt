@@ -40,7 +40,6 @@ set(DIS_SHADERS
         dis_hist
         dis_side
         dis_flow_pack
-        dis_me_luma
         dis_vr_prep
         dis_vr_d1
         dis_vr_d2
@@ -73,7 +72,6 @@ add_library(dis_vulkan STATIC
         dis/dis.cpp
         dis/dis_jni.cpp
         dis/src/vkr_dis.c
-        dis/src/dis_qcom_me.c
         dis/src/vk_dispatch.c
 )
 add_dependencies(dis_vulkan dis_shaders)

@@ -341,11 +341,12 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
                 }
 
                 if (window.id == frameRatingWindowId) {
-                    frameRating.update();
+                    if (frameRating != null) frameRating.update();
+                    final long presentedNs = System.nanoTime();
                     xServerView.queueEvent(() -> {
                         GLRenderer renderer = xServerView.getRenderer();
                         if (renderer != null && renderer.getEffectComposer() != null) {
-                            renderer.getEffectComposer().updateFPS();
+                            renderer.getEffectComposer().updateFPS(presentedNs);
                         }
                     });
                 }
@@ -1474,8 +1475,9 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
             }
     }
 
+    // Tracks the game's window even without the FPS counter: frame generation paces itself by
+    // the frames presented to it.
     private void changeFrameRatingVisibility(Window window, Property property) {
-        if (frameRating == null) return;
         if (property != null) {
             if (frameRatingWindowId == -1 && window.attributes.isMapped() && property.nameAsString().equals("_MESA_DRV")) {
                 frameRatingWindowId = window.id;
@@ -1483,7 +1485,7 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
         }
         else if (window.id == frameRatingWindowId) {
             frameRatingWindowId = -1;
-            runOnUiThread(() -> frameRating.setVisibility(View.GONE));
+            if (frameRating != null) runOnUiThread(() -> frameRating.setVisibility(View.GONE));
         }
     }
 

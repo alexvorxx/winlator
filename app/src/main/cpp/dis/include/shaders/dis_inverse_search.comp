@@ -55,25 +55,34 @@ precision highp int;
 // there is nothing for the test to change; skip its 64 samples.
 #define DIS_ZERO_TEST_MIN_PX 0.5
 
+// Gauss-Newton only converges within a few texels of where it starts, and a move of more than a
+// patch is thrown out, so starting the coarsest level from zero caps the motion the whole
+// pyramid can follow - at 180p flow, somewhere between 100 and 190 px per frame at 1024x768,
+// which a fast camera turn exceeds. The coarsest level is tiny (30x22 texels at 180p), so there
+// the displacements within the radius are block-matched first, every second one and on every
+// second texel of the patch, and Gauss-Newton refines the best from there. The bias, per sample
+// and squared texel of displacement, makes a flat block that matches anywhere keep the smallest
+// move.
+//
+// On the desktop bench (1024x768, 180p, 30 fps source) a flick at 190 px per frame goes from
+// 13.7 dB, no better than repeating a frame, to 18.8 dB, and at 290 px from 12.9 to 15.3 dB;
+// the other scenes stay within 0.4 dB, and the flow costs about 4% more.
+#define DIS_COARSE_SEARCH_RADIUS 12
+#define DIS_COARSE_SEARCH_BIAS 1.0
+
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 layout(set = 0, binding = 0) uniform sampler2D lastLumaMap;
 layout(set = 0, binding = 1) uniform sampler2D nextLumaMap;
 layout(set = 0, binding = 2) uniform sampler2D lastGradientMap;
 layout(set = 0, binding = 3) uniform sampler2D flowMap;
-// Motion hint from a hardware estimator (GL_QCOM_motion_estimation), one vector per block, in
-// normalised uv units; read only on the level named by hintLevel. A component beyond HINT_INVALID
-// marks a block the estimator had nothing for.
-layout(set = 0, binding = 4) uniform sampler2D hintFlowMap;
+layout(set = 0, binding = 4) uniform sampler2D lastFlowMap;
 layout(set = 0, binding = 5, rgba32f) uniform image2D sparseFlowMap;
 
 layout(push_constant) uniform PC {
     int level;
     int coarseLevel;
-    int hintLevel;
 } pc;
-
-#define HINT_INVALID 1.0e6
 
 float uluminance(vec3 c) {
     return (0.299 * c.x + 0.587 * c.y + 0.114 * c.z) * 255.0;
@@ -146,6 +155,28 @@ void main() {
     vec2 flow;
     if (pc.level == pc.coarseLevel) {
         flow = vec2(0.0);
+        float bestCost = 1e30;
+        ivec2 maxOrigin = denseSize - ivec2(8);
+        for (int dy = -DIS_COARSE_SEARCH_RADIUS; dy <= DIS_COARSE_SEARCH_RADIUS; dy += 2) {
+            for (int dx = -DIS_COARSE_SEARCH_RADIUS; dx <= DIS_COARSE_SEARCH_RADIUS; dx += 2) {
+                ivec2 o = pix + ivec2(dx, dy);
+                if (any(lessThan(o, ivec2(0))) || any(greaterThan(o, maxOrigin))) continue;
+                float s = 0.0;
+                float s2 = 0.0;
+                for (int i = 0; i < 8; i += 2) {
+                    for (int j = 0; j < 8; j += 2) {
+                        float diff = texelFetch(nextLumaMap, o + ivec2(i, j), 0).x - REF(i, j);
+                        s += diff;
+                        s2 += diff * diff;
+                    }
+                }
+                float cost = s2 - s * s / 16.0 + DIS_COARSE_SEARCH_BIAS * 16.0 * float(dx * dx + dy * dy);
+                if (cost < bestCost) {
+                    bestCost = cost;
+                    flow = vec2(dx, dy);
+                }
+            }
+        }
     } else {
         ivec2 fmMax = textureSize(flowMap, 0) - 1;
         vec4 cf = texelFetch(flowMap, clamp(ivec2(pix / 2) + 2, ivec2(0), fmMax), 0);
@@ -155,39 +186,6 @@ void main() {
     vec2 invImageSize = 1.0 / vec2(denseSize);
     const float N = 64.0;
 
-    // A second starting point from the hardware estimator. Both candidates are scored on the
-    // patch with the same mean-normalised SSD the search minimises, and the search starts from
-    // the better one. The coarse level still covers what the estimator cannot: its search range
-    // is a few dozen pixels, and past that its vector is garbage that simply loses here.
-    if (pc.level == pc.hintLevel) {
-        vec2 hintSize = vec2(textureSize(hintFlowMap, 0));
-        ivec2 hp = clamp(ivec2((vec2(pix) + 4.0) * hintSize / vec2(denseSize)),
-                         ivec2(0), ivec2(hintSize) - 1);
-        vec2 hint = texelFetch(hintFlowMap, hp, 0).xy;
-        if (all(lessThan(abs(hint), vec2(HINT_INVALID * 0.5)))) {
-            hint *= vec2(denseSize);
-            vec2 cand[2] = vec2[2](flow, hint);
-            float best = 1e30;
-            for (int c = 0; c < 2; c++) {
-                vec2 o = clamp(vec2(pix) + cand[c], vec2(0.0), vec2(denseSize) - patchSize);
-                float s = 0.0;
-                float s2 = 0.0;
-                for (int i = 0; i < 8; i++) {
-                    for (int j = 0; j < 8; j++) {
-                        vec2 tc = (o + vec2(i, j) + 0.5) * invImageSize;
-                        float diff = textureLod(nextLumaMap, tc, 0.0).x - REF(i, j);
-                        s += diff;
-                        s2 += diff * diff;
-                    }
-                }
-                float ssd = s2 - s * s / N;
-                if (ssd < best) {
-                    best = ssd;
-                    flow = cand[c];
-                }
-            }
-        }
-    }
     vec2 initialFlow = flow;
 
     const float N_INV = 1.0 / N;

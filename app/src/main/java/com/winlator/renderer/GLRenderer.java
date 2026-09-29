@@ -256,6 +256,29 @@ public class GLRenderer implements GLSurfaceView.Renderer, WindowManager.OnWindo
         }
     }
 
+    /**
+     * Draws the scene as it is now into {@code framebuffer} at the X screen's own size, one texel
+     * per screen pixel, as drawFrame lays it out in its viewport. Leaves that framebuffer bound.
+     */
+    public void drawSceneAtScreenSize(int framebuffer) {
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, framebuffer);
+        GLES20.glViewport(0, 0, xServer.screenInfo.width, xServer.screenInfo.height);
+        viewportNeedsUpdate = true;
+        GLES20.glDisable(GLES20.GL_SCISSOR_TEST);
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
+
+        renderWindows(false);
+        if (cursorVisible && !rootWindowDownsized) renderCursor();
+    }
+
+    public int getScreenWidth() {
+        return xServer.screenInfo.width;
+    }
+
+    public int getScreenHeight() {
+        return xServer.screenInfo.height;
+    }
+
     private void renderWindows(boolean forceFullscreen) {
         windowMaterial.use();
         GLES20.glUniform2f(windowMaterial.getUniformLocation("viewSize"), xServer.screenInfo.width, xServer.screenInfo.height);
