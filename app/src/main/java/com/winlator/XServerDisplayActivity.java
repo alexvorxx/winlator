@@ -342,10 +342,11 @@ public class XServerDisplayActivity extends AppCompatActivity implements Navigat
 
                 if (window.id == frameRatingWindowId) {
                     if (frameRating != null) frameRating.update();
+                    final long presentedNs = System.nanoTime();
                     xServerView.queueEvent(() -> {
                         GLRenderer renderer = xServerView.getRenderer();
                         if (renderer != null && renderer.getEffectComposer() != null) {
-                            renderer.getEffectComposer().updateFPS();
+                            renderer.getEffectComposer().updateFPS(presentedNs);
                         }
                     });
                 }
