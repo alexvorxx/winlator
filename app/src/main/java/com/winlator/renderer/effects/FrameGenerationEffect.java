@@ -110,6 +110,8 @@ public class FrameGenerationEffect extends Effect {
     private long pairPrevNs = 0, pairCurrNs = 0;  // when the two frames DIS holds were presented
     private int framesPushed = 0;                 // counts up to 2
     private long playDelayNs = 0;                 // the frames shown are this far behind the game
+    private long lateMarginNs = 0;                // learned from late frames, see prepareFramePaced
+    private long deliveryLagNs = 0;               // mean time from present to capture, logged
     private boolean holdingLate = false;
     private long lastGenerateNs = 0;
     private float lastGeneratedT = -1.0f;
@@ -744,6 +746,10 @@ public class FrameGenerationEffect extends Effect {
         queuedFrames--;
         System.arraycopy(queuedFrameNs, 1, queuedFrameNs, 0, queuedFrames);
         if (framesPushed < 2) framesPushed++;
+        // Every frame that is on time gives a little of the learned margin back.
+        if (framesPushed >= 2 && !holdingLate) {
+            lateMarginNs = Math.max(0, lateMarginNs - NANOS_PER_MILLISECOND / 20);
+        }
 
         texturePrev = disVulkan.getPrevGlTexture();
         textureCurr = disVulkan.getCurrGlTexture();
@@ -777,11 +783,13 @@ public class FrameGenerationEffect extends Effect {
         if (pacedStatsStartNs == 0) pacedStatsStartNs = now;
         if (now - pacedStatsStartNs >= 5 * NANOS_PER_SECOND) {
             double secs = (now - pacedStatsStartNs) / (double) NANOS_PER_SECOND;
-            Log.i(TAG, String.format("Paced: draws %.1f/s, real %.1f/s, generated %.1f/s, frame %.1f ms +- %.1f, delay %.1f ms, late %d, skipped %d",
+            Log.i(TAG, String.format("Paced: draws %.1f/s, real %.1f/s, generated %.1f/s, frame %.1f ms +- %.1f, lag %.1f ms, delay %.1f ms (margin %.1f), late %d, skipped %d",
                     pacedDraws / secs, pacedReal / secs, pacedGenerated / secs,
                     meanNs / (double) NANOS_PER_MILLISECOND,
                     realFrameJitterNs / (double) NANOS_PER_MILLISECOND,
+                    deliveryLagNs / (double) NANOS_PER_MILLISECOND,
                     playDelayNs / (double) NANOS_PER_MILLISECOND,
+                    lateMarginNs / (double) NANOS_PER_MILLISECOND,
                     pacedLate, pacedSkipped));
             pacedStatsStartNs = now;
             pacedDraws = pacedReal = pacedGenerated = pacedLate = pacedSkipped = 0;
@@ -799,6 +807,8 @@ public class FrameGenerationEffect extends Effect {
             }
             captureFrameForDis(disVulkan.getQueueGlTexture(queuedFrames));
             queuedFrameNs[queuedFrames++] = realFramePendingNs;
+            long lagNs = now - realFramePendingNs;
+            if (lagNs >= 0 && lagNs < 250 * NANOS_PER_MILLISECOND) deliveryLagNs += (lagNs - deliveryLagNs) / 8;
             lastRealFrameTimeNs = now;
         }
 
@@ -814,7 +824,9 @@ public class FrameGenerationEffect extends Effect {
             return;
         }
 
-        long targetDelayNs = Math.min(meanNs + 2 * realFrameJitterNs + NANOS_PER_MILLISECOND, 2 * meanNs);
+        // A frame reaches this thread some time after the game presents it (it waits while a draw
+        // is in progress), so the jitter alone does not cover it; the margin learns the rest.
+        long targetDelayNs = Math.min(meanNs + 2 * realFrameJitterNs + NANOS_PER_MILLISECOND + lateMarginNs, 3 * meanNs);
         long easeNs = NANOS_PER_MILLISECOND / 2;
         if (playDelayNs > targetDelayNs) playDelayNs -= Math.min(playDelayNs - targetDelayNs, easeNs);
         else if (playDelayNs < targetDelayNs) playDelayNs += Math.min(targetDelayNs - playDelayNs, easeNs);
@@ -827,7 +839,10 @@ public class FrameGenerationEffect extends Effect {
             // The next frame is late: hold on the last one instead of running past it.
             playDelayNs = now - pairCurrNs;
             clockNs = pairCurrNs;
-            if (!holdingLate) pacedLate++;
+            if (!holdingLate) {
+                pacedLate++;
+                lateMarginNs = Math.min(lateMarginNs + 2 * NANOS_PER_MILLISECOND, meanNs);
+            }
             holdingLate = true;
         } else {
             holdingLate = false;
