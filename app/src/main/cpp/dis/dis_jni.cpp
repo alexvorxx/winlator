@@ -2,7 +2,6 @@
 
 #include <jni.h>
 #include <android/log.h>
-#include <android/asset_manager_jni.h>
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 
@@ -20,27 +19,15 @@ static EGLDisplay getEglDisplay() {
 extern "C" {
 
 JNIEXPORT jboolean JNICALL
-Java_com_winlator_renderer_DIS_nativeInit(
-        JNIEnv* env, jclass cls, jobject assetMgr) {
-
-    EGLDisplay dpy = getEglDisplay();
+Java_com_winlator_renderer_DIS_nativeInit(JNIEnv* env, jclass cls) {
+    (void)env; (void)cls;
+    EGLDisplay dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     if (dpy == EGL_NO_DISPLAY) {
         LOGE("eglGetDisplay failed");
         return JNI_FALSE;
     }
-
-    AAssetManager* mgr = AAssetManager_fromJava(env, assetMgr);
-    if (!mgr) {
-        LOGE("AAssetManager_fromJava failed");
-        return JNI_FALSE;
-    }
-
-    bool ok = disVulkanInit(&g_ctx, dpy, mgr);
-    if (ok) {
-        LOGI("DisVulkan native init OK");
-    } else {
-        LOGE("DisVulkan native init FAILED");
-    }
+    bool ok = disVulkanInit(&g_ctx, dpy);
+    LOGI("DisVulkan native init %s", ok ? "OK" : "FAILED");
     return ok ? JNI_TRUE : JNI_FALSE;
 }
 

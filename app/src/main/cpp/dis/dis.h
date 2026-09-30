@@ -23,27 +23,6 @@ typedef VkResult (VKAPI_PTR *PFN_vkGetAndroidHardwareBufferPropertiesANDROID)(
 #define EGL_NO_IMAGE_KHR ((EGLImageKHR)0)
 #endif
 
-// ── Shader asset names (SPIR-V compiled from .comp via glslc) ──
-#define DIS_SHADER_DOWNSCALE_RGBA8   "shaders/dis_downscale_rgba8.spv"
-#define DIS_SHADER_DOWNSCALE_R32     "shaders/dis_downscale_r32.spv"
-#define DIS_SHADER_LUMA_R32          "shaders/dis_luma_r32.spv"
-#define DIS_SHADER_GRADIENT           "shaders/dis_gradient.spv"
-#define DIS_SHADER_INVERSE_SEARCH     "shaders/dis_inverse_search.spv"
-#define DIS_SHADER_PROPAGATE          "shaders/dis_propagate.spv"
-#define DIS_SHADER_DENSIFY            "shaders/dis_densify.spv"
-#define DIS_SHADER_FLOW_TO_AHB        "shaders/dis_flow_to_ahb.spv"
-#define DIS_SHADER_INTERPOLATE        "shaders/dis_interpolate.spv"
-// Variational refinement
-#define DIS_SHADER_VR_PREP            "shaders/dis_vr_prep.spv"
-#define DIS_SHADER_VR_D1              "shaders/dis_vr_d1.spv"
-#define DIS_SHADER_VR_D2              "shaders/dis_vr_d2.spv"
-#define DIS_SHADER_VR_W              "shaders/dis_vr_w.spv"
-#define DIS_SHADER_VR_COEF            "shaders/dis_vr_coef.spv"
-#define DIS_SHADER_VR_SOR            "shaders/dis_vr_sor.spv"
-#define DIS_SHADER_VR_ADD            "shaders/dis_vr_add.spv"
-
-#define DIS_SHADER_DEBUG_COPY        "shaders/dis_debug_copy.spv"
-
 #define DIS_PYRAMID_LEVELS 4
 #define DIS_PROPAGATION_PASSES 4
 #define DIS_SOR_ITERATIONS 50
@@ -196,7 +175,7 @@ struct DisVulkanContext {
 };
 
 // ── C API ──
-bool disVulkanInit(DisVulkanContext* ctx, EGLDisplay eglDisplay, void* assetMgr);
+bool disVulkanInit(DisVulkanContext* ctx, EGLDisplay eglDisplay);
 void disVulkanCleanup(DisVulkanContext* ctx);
 
 bool disVulkanCreateAhbTexture(DisVulkanContext* ctx, AhbTexture* tex,

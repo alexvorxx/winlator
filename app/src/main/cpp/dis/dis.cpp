@@ -1,9 +1,26 @@
 #include "dis.h"
 
-#include <android/asset_manager.h>
 #include <android/log.h>
 #include <cstring>
 #include <cmath>
+
+#include "shaders/dis_downscale_rgba8_comp.spv.h"
+#include "shaders/dis_downscale_r32_comp.spv.h"
+#include "shaders/dis_luma_r32_comp.spv.h"
+#include "shaders/dis_gradient_comp.spv.h"
+#include "shaders/dis_inverse_search_comp.spv.h"
+#include "shaders/dis_propagate_comp.spv.h"
+#include "shaders/dis_densify_comp.spv.h"
+#include "shaders/dis_flow_to_ahb_comp.spv.h"
+#include "shaders/dis_interpolate_comp.spv.h"
+#include "shaders/dis_vr_prep_comp.spv.h"
+#include "shaders/dis_vr_d1_comp.spv.h"
+#include "shaders/dis_vr_d2_comp.spv.h"
+#include "shaders/dis_vr_w_comp.spv.h"
+#include "shaders/dis_vr_coef_comp.spv.h"
+#include "shaders/dis_vr_sor_comp.spv.h"
+#include "shaders/dis_vr_add_comp.spv.h"
+#include "shaders/dis_debug_copy_comp.spv.h"
 
 #define LOG_TAG "DisVulkan"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  LOG_TAG, __VA_ARGS__)
@@ -117,27 +134,13 @@ static void destroyImage(DisVulkanContext* ctx, ImageResource* res) {
     res->view   = VK_NULL_HANDLE;
 }
 
-static std::vector<uint32_t> loadShader(AAssetManager* mgr, const char* path) {
-    AAsset* a = AAssetManager_open(mgr, path, AASSET_MODE_BUFFER);
-    if (!a) {
-        LOGE("Shader not found: %s", path);
-        return {};
-    }
-    size_t sz = AAsset_getLength(a);
-    std::vector<uint32_t> code(sz / 4);
-    AAsset_read(a, code.data(), sz);
-    AAsset_close(a);
-    LOGI("Loaded shader: %s (%zu bytes)", path, sz);
-    return code;
-}
-
 static VkShaderModule createShaderModule(DisVulkanContext* ctx,
-                                          const std::vector<uint32_t>& code) {
-    if (code.empty()) return VK_NULL_HANDLE;
+                                         const uint32_t* code, size_t code_size) {
+    if (!code || code_size == 0) return VK_NULL_HANDLE;
     VkShaderModuleCreateInfo ci = {};
     ci.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    ci.codeSize = code.size() * 4;
-    ci.pCode    = code.data();
+    ci.codeSize = code_size;
+    ci.pCode    = code;
     VkShaderModule mod;
     if (vkCreateShaderModule(ctx->device, &ci, nullptr, &mod) != VK_SUCCESS) {
         LOGE("vkCreateShaderModule failed");
@@ -285,7 +288,7 @@ static VkPipelineLayout createPipelineLayout(VkDevice dev,
 //  Init
 // ════════════════════════════════════════════════════════════
 
-bool disVulkanInit(DisVulkanContext* ctx, EGLDisplay eglDisplay, void* assetMgr) {
+bool disVulkanInit(DisVulkanContext* ctx, EGLDisplay eglDisplay) {
     if (ctx->initialized) return true;
 
     // ── Create VkInstance ──
@@ -410,32 +413,30 @@ bool disVulkanInit(DisVulkanContext* ctx, EGLDisplay eglDisplay, void* assetMgr)
     ctx->plVRCoef = createPipelineLayout(ctx->device, ctx->dslVRCoef, 16);
 
     // ── Load shaders and create pipelines ──
-    AAssetManager* mgr = (AAssetManager*)assetMgr;
-    auto loadPipe = [&](const char* path, VkPipelineLayout pl, const char* name) -> VkPipeline {
-        auto code = loadShader(mgr, path);
-        if (code.empty()) { LOGE("Failed to load: %s", path); return VK_NULL_HANDLE; }
-        VkShaderModule sm = createShaderModule(ctx, code);
-        if (!sm) { LOGE("Failed to create module: %s", path); return VK_NULL_HANDLE; }
+    auto loadPipe = [&](const uint32_t* code, size_t code_size,
+                        VkPipelineLayout pl, const char* name) -> VkPipeline {
+        VkShaderModule sm = createShaderModule(ctx, code, code_size);
+        if (!sm) { LOGE("Failed to create module: %s", name); return VK_NULL_HANDLE; }
         return createComputePipe(ctx, sm, pl, name);
     };
 
-    ctx->pipeDownscaleRgba8 = loadPipe(DIS_SHADER_DOWNSCALE_RGBA8, ctx->plMain, "downscaleRgba8");
-    ctx->pipeDownscaleR32   = loadPipe(DIS_SHADER_DOWNSCALE_R32,   ctx->plMain, "downscaleR32");
-    ctx->pipeLumaR32         = loadPipe(DIS_SHADER_LUMA_R32,         ctx->plMain, "lumaR32");
-    ctx->pipeGradient        = loadPipe(DIS_SHADER_GRADIENT,         ctx->plMain, "gradient");
-    ctx->pipeInverseSearch   = loadPipe(DIS_SHADER_INVERSE_SEARCH,   ctx->plMain, "inverseSearch");
-    ctx->pipePropagate       = loadPipe(DIS_SHADER_PROPAGATE,        ctx->plMain, "propagate");
-    ctx->pipeDensify         = loadPipe(DIS_SHADER_DENSIFY,          ctx->plMain, "densify");
-    ctx->pipeFlowToAhb       = loadPipe(DIS_SHADER_FLOW_TO_AHB,       ctx->plMain, "flowToAhb");
-    ctx->pipeInterpolate     = loadPipe(DIS_SHADER_INTERPOLATE,       ctx->plMain, "interpolate");
-    ctx->pipeDebugCopy       = loadPipe(DIS_SHADER_DEBUG_COPY,        ctx->plMain, "debugCopy");
-    ctx->pipeVRPrep          = loadPipe(DIS_SHADER_VR_PREP,           ctx->plVR,   "vrPrep");
-    ctx->pipeVRD1            = loadPipe(DIS_SHADER_VR_D1,             ctx->plVR,   "vrD1");
-    ctx->pipeVRD2            = loadPipe(DIS_SHADER_VR_D2,             ctx->plVR,   "vrD2");
-    ctx->pipeVRW             = loadPipe(DIS_SHADER_VR_W,              ctx->plVR,   "vrW");
-    ctx->pipeVRCoef          = loadPipe(DIS_SHADER_VR_COEF,           ctx->plVRCoef, "vrCoef");
-    ctx->pipeVRSor           = loadPipe(DIS_SHADER_VR_SOR,            ctx->plVR,   "vrSor");
-    ctx->pipeVRAdd           = loadPipe(DIS_SHADER_VR_ADD,            ctx->plVR,   "vrAdd");
+    ctx->pipeDownscaleRgba8 = loadPipe(dis_downscale_rgba8_comp, dis_downscale_rgba8_comp_size, ctx->plMain, "downscaleRgba8");
+    ctx->pipeDownscaleR32   = loadPipe(dis_downscale_r32_comp,   dis_downscale_r32_comp_size,   ctx->plMain, "downscaleR32");
+    ctx->pipeLumaR32        = loadPipe(dis_luma_r32_comp,        dis_luma_r32_comp_size,        ctx->plMain, "lumaR32");
+    ctx->pipeGradient       = loadPipe(dis_gradient_comp,        dis_gradient_comp_size,        ctx->plMain, "gradient");
+    ctx->pipeInverseSearch  = loadPipe(dis_inverse_search_comp,  dis_inverse_search_comp_size,  ctx->plMain, "inverseSearch");
+    ctx->pipePropagate      = loadPipe(dis_propagate_comp,       dis_propagate_comp_size,       ctx->plMain, "propagate");
+    ctx->pipeDensify        = loadPipe(dis_densify_comp,         dis_densify_comp_size,         ctx->plMain, "densify");
+    ctx->pipeFlowToAhb      = loadPipe(dis_flow_to_ahb_comp,     dis_flow_to_ahb_comp_size,     ctx->plMain, "flowToAhb");
+    ctx->pipeInterpolate    = loadPipe(dis_interpolate_comp,     dis_interpolate_comp_size,     ctx->plMain, "interpolate");
+    ctx->pipeDebugCopy      = loadPipe(dis_debug_copy_comp,      dis_debug_copy_comp_size,      ctx->plMain, "debugCopy");
+    ctx->pipeVRPrep         = loadPipe(dis_vr_prep_comp,         dis_vr_prep_comp_size,         ctx->plVR,   "vrPrep");
+    ctx->pipeVRD1           = loadPipe(dis_vr_d1_comp,           dis_vr_d1_comp_size,           ctx->plVR,   "vrD1");
+    ctx->pipeVRD2           = loadPipe(dis_vr_d2_comp,           dis_vr_d2_comp_size,           ctx->plVR,   "vrD2");
+    ctx->pipeVRW            = loadPipe(dis_vr_w_comp,            dis_vr_w_comp_size,            ctx->plVR,   "vrW");
+    ctx->pipeVRCoef         = loadPipe(dis_vr_coef_comp,         dis_vr_coef_comp_size,         ctx->plVRCoef, "vrCoef");
+    ctx->pipeVRSor          = loadPipe(dis_vr_sor_comp,          dis_vr_sor_comp_size,          ctx->plVR,   "vrSor");
+    ctx->pipeVRAdd          = loadPipe(dis_vr_add_comp,          dis_vr_add_comp_size,          ctx->plVR,   "vrAdd");
 
     // Check essential pipelines
     if (!ctx->pipeDownscaleRgba8 || !ctx->pipeLumaR32 || !ctx->pipeGradient ||

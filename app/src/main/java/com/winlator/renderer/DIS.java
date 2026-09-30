@@ -1,6 +1,5 @@
 package com.winlator.renderer;
 
-import android.content.res.AssetManager;
 import android.opengl.GLES20;
 import android.util.Log;
 
@@ -33,7 +32,7 @@ public class DIS {
     private boolean initialized = false;
 
     // ── Native methods ──
-    private static native boolean nativeInit(AssetManager assetMgr);
+    private static native boolean nativeInit();
     private static native long    nativeCreateAhbTexture(int width, int height, int format);
     private static native void    nativeDestroyAhbTexture(long ptr);
     private static native int     nativeGetGlTexture(long ptr);
@@ -68,9 +67,9 @@ public class DIS {
         System.loadLibrary("winlator");
     }
 
-    public boolean init(AssetManager assetMgr) {
+    public boolean init() {
         if (initialized) return true;
-        initialized = nativeInit(assetMgr);
+        initialized = nativeInit();
         Log.i(TAG, "init: " + (initialized ? "OK" : "FAILED"));
         return initialized;
     }

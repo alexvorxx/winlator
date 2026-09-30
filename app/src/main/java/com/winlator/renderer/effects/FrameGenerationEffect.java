@@ -1,6 +1,5 @@
 package com.winlator.renderer.effects;
 
-import android.content.res.AssetManager;
 import android.opengl.GLES20;
 import android.opengl.GLES30;
 import android.util.Log;
@@ -187,8 +186,7 @@ public class FrameGenerationEffect extends Effect {
 
         if (apiMode == API_DIS) {
             disVulkan = new DIS();
-            AssetManager mgr = renderer.xServerView.getContext().getAssets();
-            disVulkanReady = disVulkan.init(mgr);
+            disVulkanReady = disVulkan.init();
 
             switch (generationMode) {
                 case GENERATION_MODE_FAST:     disVulkan.setPreset(DIS.PRESET_FAST_MIN_SIDE);     break;
