@@ -210,5 +210,93 @@
                     android:orientation="horizontal" />
             </HorizontalScrollView>
         </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/LLDynamicStickSettings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <View style="@style/HorizontalLine" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textStyle="bold"
+                android:text="@string/detection_area" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/area_width"/>
+
+                <TextView
+                    android:id="@+id/TVAreaWidthValue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
+
+            <SeekBar
+                android:id="@+id/SBAreaWidth"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:min="200"
+                android:max="2000" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/area_height"/>
+
+                <TextView
+                    android:id="@+id/TVAreaHeightValue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
+
+            <SeekBar
+                android:id="@+id/SBAreaHeight"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:min="200"
+                android:max="2000" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/stick_radius"/>
+
+                <TextView
+                    android:id="@+id/TVStickRadiusValue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
+
+            <SeekBar
+                android:id="@+id/SBStickRadius"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:min="50"
+                android:max="500" />
+        </LinearLayout>
     </LinearLayout>
 </ScrollView>

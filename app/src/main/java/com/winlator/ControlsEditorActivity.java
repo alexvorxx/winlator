@@ -93,6 +93,7 @@ public class ControlsEditorActivity extends AppCompatActivity implements View.On
             view.findViewById(R.id.CBToggleSwitch).setVisibility(View.GONE);
             view.findViewById(R.id.LLCustomTextIcon).setVisibility(View.GONE);
             view.findViewById(R.id.LLRangeOptions).setVisibility(View.GONE);
+            view.findViewById(R.id.LLDynamicStickSettings).setVisibility(View.GONE);
 
             if (type == ControlElement.Type.BUTTON) {
                 view.findViewById(R.id.LLShape).setVisibility(View.VISIBLE);
@@ -101,6 +102,9 @@ public class ControlsEditorActivity extends AppCompatActivity implements View.On
             }
             else if (type == ControlElement.Type.RANGE_BUTTON) {
                 view.findViewById(R.id.LLRangeOptions).setVisibility(View.VISIBLE);
+            }
+            else if (type == ControlElement.Type.DYNAMIC_STICK) {
+                view.findViewById(R.id.LLDynamicStickSettings).setVisibility(View.VISIBLE);
             }
 
             loadBindingSpinners(element, view);
@@ -148,6 +152,64 @@ public class ControlsEditorActivity extends AppCompatActivity implements View.On
             public void onStopTrackingTouch(SeekBar seekBar) {}
         });
         sbScale.setProgress((int)(element.getScale() * 100));
+
+        final TextView tvAreaWidth = view.findViewById(R.id.TVAreaWidthValue);
+        final TextView tvAreaHeight = view.findViewById(R.id.TVAreaHeightValue);
+        final TextView tvStickRadius = view.findViewById(R.id.TVStickRadiusValue);
+        SeekBar sbAreaWidth = view.findViewById(R.id.SBAreaWidth);
+        SeekBar sbAreaHeight = view.findViewById(R.id.SBAreaHeight);
+        SeekBar sbStickRadius = view.findViewById(R.id.SBStickRadius);
+
+        sbAreaWidth.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (fromUser) {
+                    progress = (int)Mathf.roundTo(progress, 5);
+                    seekBar.setProgress(progress);
+                    element.setAreaWidth(progress);
+                    tvAreaWidth.setText(progress+"px");
+                    profile.save();
+                    inputControlsView.invalidate();
+                }
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+        sbAreaWidth.setProgress(element.getAreaWidth());
+        tvAreaWidth.setText(element.getAreaWidth()+"px");
+
+        sbAreaHeight.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (fromUser) {
+                    progress = (int)Mathf.roundTo(progress, 5);
+                    seekBar.setProgress(progress);
+                    element.setAreaHeight(progress);
+                    tvAreaHeight.setText(progress+"px");
+                    profile.save();
+                    inputControlsView.invalidate();
+                }
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+        sbAreaHeight.setProgress(element.getAreaHeight());
+        tvAreaHeight.setText(element.getAreaHeight()+"px");
+
+        sbStickRadius.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (fromUser) {
+                    progress = (int)Mathf.roundTo(progress, 5);
+                    seekBar.setProgress(progress);
+                    element.setStickRadius(progress);
+                    tvStickRadius.setText(progress+"px");
+                    profile.save();
+                    inputControlsView.invalidate();
+                }
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+        sbStickRadius.setProgress(element.getStickRadius());
+        tvStickRadius.setText(element.getStickRadius()+"px");
 
         CheckBox cbToggleSwitch = view.findViewById(R.id.CBToggleSwitch);
         cbToggleSwitch.setChecked(element.isToggleSwitch());
@@ -224,7 +286,8 @@ public class ControlsEditorActivity extends AppCompatActivity implements View.On
             loadBindingSpinner(element, container, 0, R.string.binding);
             loadBindingSpinner(element, container, 1, R.string.binding_secondary);
         }
-        else if (type == ControlElement.Type.D_PAD || type == ControlElement.Type.STICK || type == ControlElement.Type.TRACKPAD) {
+        else if (type == ControlElement.Type.D_PAD || type == ControlElement.Type.STICK ||
+                type == ControlElement.Type.TRACKPAD || type == ControlElement.Type.DYNAMIC_STICK) {
             loadBindingSpinner(element, container, 0, R.string.binding_up);
             loadBindingSpinner(element, container, 1, R.string.binding_right);
             loadBindingSpinner(element, container, 2, R.string.binding_down);

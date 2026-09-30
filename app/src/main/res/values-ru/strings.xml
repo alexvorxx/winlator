@@ -538,4 +538,9 @@
     <string name="vkbasalt_sharpness_effects">Эффект резкости</string>
     <string name="vkbasalt_sharpness_level">Уровень резкости</string>
     <string name="vkbasalt_sharpness_denoise">Шумоподавление резкости</string>
+
+    <string name="detection_area">Область обнаружения</string>
+    <string name="area_width">Ширина области</string>
+    <string name="area_height">Высота области</string>
+    <string name="stick_radius">Радиус стика</string>
 </resources>

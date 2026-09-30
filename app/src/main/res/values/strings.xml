@@ -574,4 +574,9 @@ E.g. <b>META</b> for <i>META key</i>, \n
     <string name="vkbasalt_sharpness_effects" translatable="false">Sharpness Effect</string>
     <string name="vkbasalt_sharpness_level" translatable="false">Sharpness Level</string>
     <string name="vkbasalt_sharpness_denoise" translatable="false">Sharpeness Denoise</string>
+
+    <string name="detection_area" translatable="false">Detection Area</string>
+    <string name="area_width" translatable="false">Area Width</string>
+    <string name="area_height" translatable="false">Area Height</string>
+    <string name="stick_radius" translatable="false">Stick Radius</string>
 </resources>

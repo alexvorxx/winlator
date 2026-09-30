@@ -97,6 +97,10 @@ public class InputControlsView extends View {
         this.editMode = editMode;
     }
 
+    public boolean isEditMode() {
+        return editMode;
+    }
+
     public void setOverlayOpacity(float overlayOpacity) {
         this.overlayOpacity = overlayOpacity;
     }

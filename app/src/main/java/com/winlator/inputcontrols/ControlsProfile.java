@@ -216,6 +216,11 @@ public class ControlsProfile implements Comparable<ControlsProfile> {
                 element.setIconId(elementJSONObject.getInt("iconId"));
                 if (elementJSONObject.has("range")) element.setRange(ControlElement.Range.valueOf(elementJSONObject.getString("range")));
                 if (elementJSONObject.has("orientation")) element.setOrientation((byte)elementJSONObject.getInt("orientation"));
+                if (element.getType() == ControlElement.Type.DYNAMIC_STICK) {
+                    element.setAreaWidth(elementJSONObject.optInt("areaWidth", 500));
+                    element.setAreaHeight(elementJSONObject.optInt("areaHeight", 500));
+                    element.setStickRadius(elementJSONObject.optInt("stickRadius", 150));
+                }
 
                 boolean hasGamepadBinding = true;
                 JSONArray bindingsJSONArray = elementJSONObject.getJSONArray("bindings");
