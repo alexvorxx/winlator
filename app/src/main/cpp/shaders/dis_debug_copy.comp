@@ -1,0 +1,36 @@
+#version 450
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(binding = 0) uniform sampler2D srcImage;
+layout(binding = 5, rgba16f) writeonly uniform image2D dstImage;
+
+layout(push_constant) uniform PC {
+    float scale;   // для flow-режимов: диапазон [-scale..scale]
+    float offset;  // смещение (не используется, оставлено для выравнивания)
+    int   mode;    // 0=R, 1=flow(RG), 2=magnitude
+    int   _pad;
+};
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 sz = imageSize(dstImage);
+    if (p.x >= sz.x || p.y >= sz.y) return;
+
+    vec2 uv = (vec2(p) + 0.5) / vec2(sz);
+    vec4 c = texture(srcImage, uv);
+
+    vec4 outC;
+    if (mode == 0) {
+        // Grayscale — показываем R-канал (luma, gradient R)
+        outC = vec4(c.rrr, 1.0);
+    } else if (mode == 1) {
+        // Flow: R -> X (красный), G -> Y (зелёный), 0.5 — нейтраль
+        vec2 f = clamp(c.rg / scale * 0.5 + 0.5, 0.0, 1.0);
+        outC = vec4(f.x, f.y, 0.5, 1.0);
+    } else {
+        // Magnitude
+        float m = clamp(length(c.rg) / scale, 0.0, 1.0);
+        outC = vec4(m, m, m, 1.0);
+    }
+    imageStore(dstImage, p, outC);
+}

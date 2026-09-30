@@ -2,6 +2,9 @@
 
 #include <jni.h>
 #include <android/log.h>
+#include <android/asset_manager_jni.h>
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
 
 #define LOG_TAG "DisVulkanJNI"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  LOG_TAG, __VA_ARGS__)
@@ -9,27 +12,50 @@
 
 static DisVulkanContext g_ctx;
 
+// Helper: get EGL display
+static EGLDisplay getEglDisplay() {
+    return eglGetDisplay(EGL_DEFAULT_DISPLAY);
+}
+
 extern "C" {
 
 JNIEXPORT jboolean JNICALL
-Java_com_winlator_renderer_DIS_nativeInit(JNIEnv* env, jclass cls) {
-    (void)env; (void)cls;
-    EGLDisplay dpy = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+Java_com_winlator_renderer_DIS_nativeInit(
+        JNIEnv* env, jclass cls, jobject assetMgr) {
+
+    EGLDisplay dpy = getEglDisplay();
     if (dpy == EGL_NO_DISPLAY) {
         LOGE("eglGetDisplay failed");
         return JNI_FALSE;
     }
-    bool ok = disVulkanInit(&g_ctx, dpy);
-    LOGI("DisVulkan native init %s", ok ? "OK" : "FAILED");
+
+    AAssetManager* mgr = AAssetManager_fromJava(env, assetMgr);
+    if (!mgr) {
+        LOGE("AAssetManager_fromJava failed");
+        return JNI_FALSE;
+    }
+
+    bool ok = disVulkanInit(&g_ctx, dpy, mgr);
+    if (ok) {
+        LOGI("DisVulkan native init OK");
+    } else {
+        LOGE("DisVulkan native init FAILED");
+    }
     return ok ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT jlong JNICALL
 Java_com_winlator_renderer_DIS_nativeCreateAhbTexture(
         JNIEnv* env, jclass cls, jint width, jint height, jint format) {
-    (void)env; (void)cls;
+
     AhbTexture* tex = new AhbTexture();
-    VkFormat vkFmt = format == 1 ? VK_FORMAT_R16G16B16A16_SFLOAT : VK_FORMAT_R8G8B8A8_UNORM;
+    VkFormat vkFmt;
+    switch (format) {
+        case 0:  vkFmt = VK_FORMAT_R8G8B8A8_UNORM;       break;
+        case 1:  vkFmt = VK_FORMAT_R16G16B16A16_SFLOAT;  break;
+        default: vkFmt = VK_FORMAT_R8G8B8A8_UNORM;       break;
+    }
+
     if (!disVulkanCreateAhbTexture(&g_ctx, tex, width, height, vkFmt)) {
         LOGE("disVulkanCreateAhbTexture failed");
         delete tex;
@@ -39,8 +65,8 @@ Java_com_winlator_renderer_DIS_nativeCreateAhbTexture(
 }
 
 JNIEXPORT void JNICALL
-Java_com_winlator_renderer_DIS_nativeDestroyAhbTexture(JNIEnv* env, jclass cls, jlong ptr) {
-    (void)env; (void)cls;
+Java_com_winlator_renderer_DIS_nativeDestroyAhbTexture(
+        JNIEnv* env, jclass cls, jlong ptr) {
     AhbTexture* tex = (AhbTexture*)ptr;
     if (!tex) return;
     disVulkanDestroyAhbTexture(&g_ctx, tex);
@@ -48,44 +74,43 @@ Java_com_winlator_renderer_DIS_nativeDestroyAhbTexture(JNIEnv* env, jclass cls, 
 }
 
 JNIEXPORT jint JNICALL
-Java_com_winlator_renderer_DIS_nativeGetGlTexture(JNIEnv* env, jclass cls, jlong ptr) {
-    (void)env; (void)cls;
+Java_com_winlator_renderer_DIS_nativeGetGlTexture(
+        JNIEnv* env, jclass cls, jlong ptr) {
     AhbTexture* tex = (AhbTexture*)ptr;
-    return tex ? (jint)disVulkanGetGlTexture(tex) : 0;
-}
-
-JNIEXPORT void JNICALL
-Java_com_winlator_renderer_DIS_nativeSetMinSide(JNIEnv* env, jclass cls, jint minSide) {
-    (void)env; (void)cls;
-    disVulkanSetMinSide(&g_ctx, (uint32_t)minSide);
+    if (!tex) return 0;
+    return (jint)disVulkanGetGlTexture(tex);
 }
 
 JNIEXPORT jboolean JNICALL
-Java_com_winlator_renderer_DIS_nativePushFrame(
-        JNIEnv* env, jclass cls, jlong framePtr, jint generations) {
-    (void)env; (void)cls;
-    return disVulkanPushFrame(&g_ctx, (AhbTexture*)framePtr, generations) ? JNI_TRUE : JNI_FALSE;
-}
+Java_com_winlator_renderer_DIS_nativeComputeFlow(
+        JNIEnv* env, jclass cls,
+        jlong prevPtr, jlong currPtr, jlong flowPtr,
+        jint disWidth, jint disHeight,
+        jboolean useVR) {
 
-JNIEXPORT jboolean JNICALL
-Java_com_winlator_renderer_DIS_nativeGenerate(
-        JNIEnv* env, jclass cls, jlong outPtr, jfloat t) {
-    (void)env; (void)cls;
-    return disVulkanGenerate(&g_ctx, (AhbTexture*)outPtr, t) ? JNI_TRUE : JNI_FALSE;
+    AhbTexture* prev = (AhbTexture*)prevPtr;
+    AhbTexture* curr = (AhbTexture*)currPtr;
+    AhbTexture* flow = (AhbTexture*)flowPtr;
+    if (!prev || !curr || !flow) {
+        LOGE("nativeComputeFlow: null pointer");
+        return JNI_FALSE;
+    }
+    return disVulkanComputeFlow(&g_ctx, prev, curr, flow,
+                                disWidth, disHeight,
+                                useVR == JNI_TRUE) ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT void JNICALL
-Java_com_winlator_renderer_DIS_nativeCleanup(JNIEnv* env, jclass cls) {
-    (void)env; (void)cls;
+Java_com_winlator_renderer_DIS_nativeCleanup(
+        JNIEnv* env, jclass cls) {
     disVulkanCleanup(&g_ctx);
     LOGI("DisVulkan native cleanup done");
 }
 
-// Kept for the existing debug hook: any stage other than off shows the estimated flow.
 JNIEXPORT void JNICALL
-Java_com_winlator_renderer_DIS_nativeSetDebugStage(JNIEnv* env, jclass cls, jint stage) {
-    (void)env; (void)cls;
-    disVulkanSetDebugFlow(&g_ctx, stage >= 0);
+Java_com_winlator_renderer_DIS_nativeSetDebugStage(
+        JNIEnv* env, jclass cls, jint stage) {
+    disVulkanSetDebugStage(&g_ctx, (int)stage);
 }
 
 } // extern "C"
