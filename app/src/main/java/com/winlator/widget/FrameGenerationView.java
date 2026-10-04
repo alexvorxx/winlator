@@ -37,7 +37,6 @@ public class FrameGenerationView extends FrameLayout {
     private Runnable hideButtonCallback;
     private final GLRenderer renderer;
 
-    // Добавляем элементы UI
     private final Spinner generationModeSpinner;
     private final Spinner fpsMultiplierSpinner;
     private final Spinner fpsSpinner;

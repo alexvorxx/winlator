@@ -25,7 +25,7 @@ endif()
 # The generator lives in dis/. Shaders are compiled to SPIR-V and embedded as C arrays;
 # nothing is shipped as an asset.
 set(DIS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/dis)
-set(DIS_SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/shaders)
+set(DIS_SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/dis/shaders)
 set(DIS_SHADER_OUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/dis_gen/shaders)
 file(MAKE_DIRECTORY ${DIS_SHADER_OUT_DIR})
 
@@ -72,6 +72,8 @@ add_custom_target(dis_shaders DEPENDS ${DIS_SHADER_HEADERS})
 add_library(dis_vulkan STATIC
         dis/dis.cpp
         dis/dis_jni.cpp
+        winlator/framegen_service.cpp
+        winlator/framegen_jni.cpp
 )
 add_dependencies(dis_vulkan dis_shaders)
 

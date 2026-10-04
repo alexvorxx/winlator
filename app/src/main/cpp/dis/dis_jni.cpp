@@ -84,7 +84,8 @@ Java_com_winlator_renderer_DIS_nativeComputeFlow(
     }
     return disVulkanComputeFlow(&g_ctx, prev, curr, flow,
                                 disWidth, disHeight,
-                                useVR == JNI_TRUE) ? JNI_TRUE : JNI_FALSE;
+                                useVR == JNI_TRUE,
+                                -1) ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT void JNICALL

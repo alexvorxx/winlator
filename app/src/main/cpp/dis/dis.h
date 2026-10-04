@@ -18,6 +18,8 @@ typedef void (EGLAPIENTRYP PFN_glEGLImageTargetTexture2DOES)(GLenum target, GLeg
 typedef VkResult (VKAPI_PTR *PFN_vkGetAndroidHardwareBufferPropertiesANDROID)(
         VkDevice device, const AHardwareBuffer* buffer,
         VkAndroidHardwareBufferPropertiesANDROID* pProperties);
+typedef VkResult (VKAPI_PTR *PFN_vkImportFenceFdKHR)(
+        VkDevice device, const VkImportFenceFdInfoKHR* pImportFenceFdInfo);
 
 #ifndef EGL_NO_IMAGE_KHR
 #define EGL_NO_IMAGE_KHR ((EGLImageKHR)0)
@@ -27,7 +29,6 @@ typedef VkResult (VKAPI_PTR *PFN_vkGetAndroidHardwareBufferPropertiesANDROID)(
 #define DIS_PROPAGATION_PASSES 4
 #define DIS_SOR_ITERATIONS 50
 
-// Сразу после DIS_SOR_ITERATIONS:
 enum DisDebugStage {
     DIS_DEBUG_OFF          = -1,
     DIS_DEBUG_COLOR_PREV   =  0,
@@ -69,7 +70,7 @@ struct AhbTexture {
     int              width     = 0;
     int              height    = 0;
     VkFormat         format    = VK_FORMAT_UNDEFINED;
-    bool layoutInitialized = false;
+    bool ownsAhb = true;   // disVulkanCreateAhbTexture → true; import → false
 };
 
 // ── Vulkan context ──
@@ -172,6 +173,8 @@ struct DisVulkanContext {
 
     VkPipeline pipeDebugCopy = VK_NULL_HANDLE;
     int        debugStage = DIS_DEBUG_OFF;
+
+    PFN_vkImportFenceFdKHR vkImportFenceFdKHR = nullptr;
 };
 
 // ── C API ──
@@ -186,7 +189,11 @@ bool disVulkanComputeFlow(DisVulkanContext* ctx,
                           AhbTexture* prevAhb, AhbTexture* currAhb,
                           AhbTexture* flowAhb,
                           int disWidth, int disHeight,
-                          bool useVR);
+                          bool useVR,
+                          int waitFenceFd);
+
+bool disVulkanImportAhbTexture(DisVulkanContext* ctx, AhbTexture* tex,
+                               AHardwareBuffer* ahb, int w, int h, VkFormat fmt);
 
 // Helper: get GL texture ID from AhbTexture
 GLuint disVulkanGetGlTexture(const AhbTexture* tex);

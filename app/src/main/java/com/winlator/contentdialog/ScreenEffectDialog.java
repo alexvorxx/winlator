@@ -437,7 +437,7 @@ public class ScreenEffectDialog extends ContentDialog {
                     // Android < 6.0
                     DisplayMetrics metrics = new DisplayMetrics();
                     display.getMetrics(metrics);
-                    refreshRate = (int) metrics.densityDpi; // Это не совсем точный метод
+                    refreshRate = (int) metrics.densityDpi;
                     Log.d(TAG, "Using legacy method, approximate refresh rate: " + refreshRate + "Hz");
 
                     refreshRate = 60;

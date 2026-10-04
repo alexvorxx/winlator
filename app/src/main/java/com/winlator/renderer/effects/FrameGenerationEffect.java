@@ -1,11 +1,13 @@
 package com.winlator.renderer.effects;
 
+import android.hardware.HardwareBuffer;
 import android.opengl.GLES20;
 import android.opengl.GLES30;
 import android.util.Log;
 
 import com.winlator.renderer.DIS;
 import com.winlator.renderer.EffectComposer;
+import com.winlator.renderer.FrameGenClient;
 import com.winlator.renderer.GLRenderer;
 import com.winlator.renderer.material.ScreenMaterial;
 import com.winlator.renderer.material.ShaderMaterial;
@@ -61,16 +63,14 @@ public class FrameGenerationEffect extends Effect {
     private boolean usePostProcessing;
     private boolean blendModeAuto;
     private float blendFactor;
-    private float motionScale = 0.5f;
+    private float motionScale;
     private boolean useMotionEstimation = false;
-
+    private boolean autoDetectFPS = false;
     private boolean hasFirstFrame = false;
     private boolean hasSecondFrame = false;
     private boolean waitingForSecondFrame = true;
 
     private int initialFPS = FPS_30;
-    private boolean autoDetectFPS = false;
-
     private int currentWidth = 0;
     private int currentHeight = 0;
 
@@ -90,7 +90,25 @@ public class FrameGenerationEffect extends Effect {
 
     // DIS Vulkan
     private boolean disVulkanReady = false;
+    private boolean useWorkerProcess = false;
+    private boolean workerInitialized = false;
+    private boolean inlineDisAttempted = false;
+    private boolean useDisFlow = false;
+
     private DIS disVulkan = null;
+    private FrameGenClient frameGenClient = null;
+    private HardwareBuffer workerPrevAhb;
+    private HardwareBuffer workerCurrAhb;
+    private HardwareBuffer workerFlowAhb;
+
+    private int workerPrevGlTex = 0;
+    private int workerCurrGlTex = 0;
+    private int workerFlowGlTex = 0;
+    private int workerFlowW = 0;
+    private int workerFlowH = 0;
+    private int blitReadFbo = 0;
+    private int blitDrawFbo = 0;
+    private int copyFbo = 0;
 
     // Uniform locations
     public int uIsEnabledLoc = -1;
@@ -111,34 +129,26 @@ public class FrameGenerationEffect extends Effect {
     private int textureHistory = -1;
     private int texturePrev = -1;
     private int textureCurr = -1;
-
-    private int qcomMotionTexture = -1;      // RGBA16F for motion vectors
+    private int motionTexture = -1;      // RGBA16F for motion vectors
     private int qcomRefLuminanceTexture = -1;   // R8 luminance of prev frame
     private int qcomTargetLuminanceTexture = -1; // R8 luminance of curr frame
 
     // Time
     private List<Long> realFrameIntervals = new ArrayList<>();
 
-    private int displayRefreshRate = 60;
-    private int realFrameDisplayCount = 0;
-    private int generatedFrameDisplayCount = 0;
-
-    private int currentDisplayFrameType = 0;
-    private int currentFrameDisplayCount = 0;
-
-    private int currentSequence = 0;
-
     private boolean currentRealFrameCaptured = false;
-    private int currentRealFrameIndex = 0;
-
-    private int capturedRealFrame = -1;
     private boolean hasCapturedFrame = false;
     private boolean skipFirstRealDisplay = false;
 
+    private int displayRefreshRate = 60;
+    private int realFrameDisplayCount = 0;
+    private int generatedFrameDisplayCount = 0;
+    private int currentDisplayFrameType = 0;
+    private int currentFrameDisplayCount = 0;
+    private int currentSequence = 0;
+    private int currentRealFrameIndex = 0;
+    private int capturedRealFrame = -1;
     private long lastRealFrameTimeNs = 0;
-    private long lastAnyFrameShownTimeNs = 0;
-    private long nextFrameTimeNs = 0;
-
     private long currentRealFrameIntervalNs = 33333333;  // 30 FPS
     private long currentTargetFrameIntervalNs = 16666666;  // 60 FPS
 
@@ -146,17 +156,17 @@ public class FrameGenerationEffect extends Effect {
 
     private final GLRenderer renderer;
 
-    // Native methods (return boolean for init success)
+    // Native methods for AHB
+    private static native HardwareBuffer nativeCreateHardwareBuffer(int w, int h, int format);
+    private static native int nativeAhbToGlTexture(HardwareBuffer ahb);
+    private static native int nativeCreateEglFenceFd();
+
+    // Native methods for QCOM
     private static native boolean nativeInitQCOM();
     private static native void nativeTexEstimateMotionQCOM(int ref, int target, int output);
 
     static {
         System.loadLibrary("winlator");
-    }
-
-    private void LogString(String message) {
-        if (EffectComposer.logEnabled)
-            Log.d(TAG, message);
     }
 
     public FrameGenerationEffect(GLRenderer renderer, int generationMode, int fpsMultiplier, int apiMode,
@@ -177,6 +187,12 @@ public class FrameGenerationEffect extends Effect {
                 usePostProcessing + " blendModeAuto = " + blendModeAuto + " motionScale = " + motionScale);
     }
 
+    // Common functions
+    private void LogString(String message) {
+        if (EffectComposer.logEnabled)
+            Log.d(TAG, message);
+    }
+
     /* Initializes QCOM extensions if present on the device. Must be called on the GL thread. */
     private void initQCOMIfNeeded() {
         if (apiMode == API_GLES) {
@@ -185,15 +201,7 @@ public class FrameGenerationEffect extends Effect {
         }
 
         if (apiMode == API_DIS) {
-            disVulkan = new DIS();
-            disVulkanReady = disVulkan.init();
-
-            switch (generationMode) {
-                case GENERATION_MODE_FAST:     disVulkan.setPreset(DIS.PRESET_FAST_MIN_SIDE);     break;
-                case GENERATION_MODE_BALANCED: disVulkan.setPreset(DIS.PRESET_BALANCED_MIN_SIDE); break;
-                case GENERATION_MODE_QUALITY:  disVulkan.setPreset(DIS.PRESET_QUALITY_MIN_SIDE);  break;
-            }
-            Log.d(TAG, "Selected DIS");
+            Log.d(TAG, "DIS mode selected, defer init");
             return;
         }
 
@@ -304,8 +312,6 @@ public class FrameGenerationEffect extends Effect {
             clearHistory();
             long currentTimeNs = System.nanoTime();
             lastRealFrameTimeNs = currentTimeNs;
-            lastAnyFrameShownTimeNs = currentTimeNs;
-            nextFrameTimeNs = currentTimeNs;
 
             hasFirstFrame = false;
             hasSecondFrame = false;
@@ -317,6 +323,7 @@ public class FrameGenerationEffect extends Effect {
             currentRealFrameIndex = 0;
         } else {
             useMotionEstimation = false;
+            useDisFlow = false;
         }
     }
 
@@ -346,16 +353,16 @@ public class FrameGenerationEffect extends Effect {
     }
 
     private void clearHistory() {
-        if (textureHistory != -1) {
+        if (textureHistory != -1 && !isWorkerTexture(textureHistory)) {
             GLES20.glDeleteTextures(1, new int[]{textureHistory}, 0);
         }
-        if (texturePrev != -1) {
+        if (texturePrev != -1 && !isWorkerTexture(texturePrev)) {
             GLES20.glDeleteTextures(1, new int[]{texturePrev}, 0);
         }
-        if (textureCurr != -1) {
+        if (textureCurr != -1 && !isWorkerTexture(textureCurr)) {
             GLES20.glDeleteTextures(1, new int[]{textureCurr}, 0);
         }
-        if (capturedRealFrame != -1) {
+        if (capturedRealFrame != -1 && !isWorkerTexture(capturedRealFrame)) {
             GLES20.glDeleteTextures(1, new int[]{capturedRealFrame}, 0);
         }
         textureHistory = -1;
@@ -509,7 +516,24 @@ public class FrameGenerationEffect extends Effect {
                     }
                 }
 
-                if (disVulkanReady) {
+                if (apiMode == API_DIS) {
+                    if (!inlineDisAttempted && disVulkan == null) {
+                        ensureInlineDisReady();
+                        inlineDisAttempted = true;
+                    }
+
+                    if (!workerInitialized) {
+                        if (tryInitWorker(width, height)) {
+                            workerInitialized = true;
+                            useWorkerProcess = true;
+                            Log.i(TAG, "DIS mode: switched to worker process");
+                        }
+                    }
+                }
+
+                if (useWorkerProcess && workerInitialized) {
+                    handleCaptureWorkerProcess(width, height);
+                }  else if (disVulkanReady) {
                     disVulkan.ensureTextures(width, height);
 
                     if (!hasFirstFrame) {
@@ -555,9 +579,7 @@ public class FrameGenerationEffect extends Effect {
                 }
 
                 lastRealFrameTimeNs = currentTimeNs;
-                lastAnyFrameShownTimeNs = currentTimeNs;
             } else {
-                lastAnyFrameShownTimeNs = currentTimeNs;
                 LogString("Skipping capture - already captured this cycle");
             }
 
@@ -575,24 +597,25 @@ public class FrameGenerationEffect extends Effect {
                 else
                     calculateBlendFactor();
 
-                lastAnyFrameShownTimeNs = currentTimeNs;
-
                 useMotionEstimation = false;
 
-                if (disVulkanReady && hasFirstFrame && hasSecondFrame) {
-                    GLES20.glFinish();
+                if (useWorkerProcess && workerInitialized) {
+                    if (motionTexture != -1) {
+                        useMotionEstimation = true;
+                        useDisFlow = true;
+                    }
+                } else if (disVulkanReady && hasFirstFrame && hasSecondFrame) {
                     if (disVulkanReady) {
                         disVulkan.setDebugStage(DIS.DBG_OFF);
                         GLES20.glFinish();
                         disVulkan.computeFlow();
-                        GLES20.glFinish();
                         useMotionEstimation = true;
-                        qcomMotionTexture = disVulkan.getFlowGlTexture();
+                        motionTexture = disVulkan.getFlowGlTexture();
                     }
                 } else if (hasQcomMotionEstimation && !disVulkanReady) {
                     ensureQCOMMotionTextures(width, height);
                     if (qcomRefLuminanceTexture != -1 && qcomTargetLuminanceTexture != -1 &&
-                            qcomMotionTexture != -1) {
+                            motionTexture != -1) {
 
                         // 1. Convert to luminance
                         copyTextureToR8(renderer, texturePrev, qcomRefLuminanceFBO, lumaWidth, lumaHeight);
@@ -610,7 +633,7 @@ public class FrameGenerationEffect extends Effect {
                         while (GLES20.glGetError() != GLES20.GL_NO_ERROR);
 
                         // 5. QCOM motion estimation
-                        nativeTexEstimateMotionQCOM(qcomRefLuminanceTexture, qcomTargetLuminanceTexture, qcomMotionTexture);
+                        nativeTexEstimateMotionQCOM(qcomRefLuminanceTexture, qcomTargetLuminanceTexture, motionTexture);
 
                         int err = GLES20.glGetError();
                         if (err != GLES20.GL_NO_ERROR) {
@@ -696,20 +719,22 @@ public class FrameGenerationEffect extends Effect {
         // Use flowGlTex as motion texture when DIS Vulkan is active
         if (disVulkanReady && useMotionEstimation) {
             GLES20.glActiveTexture(GLES20.GL_TEXTURE4);
-            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, disVulkan.getFlowGlTexture());
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, motionTexture);
             GLES20.glUniform1i(uMotionTextureLoc, 4);
             GLES20.glUniform1i(uUseMotionEstimationLoc, 1);
             GLES20.glUniform1i(uUseDISLoc, 1);
         } else { // Bind motion texture if available (unit 4)
             GLES20.glActiveTexture(GLES20.GL_TEXTURE4);
-            if (useMotionEstimation && qcomMotionTexture != -1) {
-                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, qcomMotionTexture);
+            if (useMotionEstimation && motionTexture != -1) {
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, motionTexture);
             } else {
                 GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
             }
             if (uMotionTextureLoc != -1)
                 GLES20.glUniform1i(uMotionTextureLoc, 4);
         }
+
+        GLES20.glUniform1i(uUseDISLoc, (useDisFlow && useMotionEstimation) ? 1 : 0);
 
         if (uResolutionLoc != -1 && currentWidth > 0 && currentHeight > 0) {
             GLES20.glUniform2f(uResolutionLoc, currentWidth, currentHeight);
@@ -763,40 +788,19 @@ public class FrameGenerationEffect extends Effect {
 
     public void cleanup() {
         clearHistory();
+        releaseWorkerProcess();
         deleteQCOMResources();
 
+        useDisFlow = false;
+        inlineDisAttempted = false;
         if (disVulkan != null) {
             disVulkan.cleanup();
             disVulkan = null;
         }
-        LogString("Effect cleaned up");
-    }
+        disVulkanReady = false;
+        useMotionEstimation = false;
 
-    private void deleteQCOMResources() {
-        if (qcomMotionTexture != -1) {
-            GLES20.glDeleteTextures(1, new int[]{qcomMotionTexture}, 0);
-            qcomMotionTexture = -1;
-        }
-        if (qcomRefLuminanceTexture != -1) {
-            GLES20.glDeleteTextures(1, new int[]{qcomRefLuminanceTexture}, 0);
-            qcomRefLuminanceTexture = -1;
-        }
-        if (qcomTargetLuminanceTexture != -1) {
-            GLES20.glDeleteTextures(1, new int[]{qcomTargetLuminanceTexture}, 0);
-            qcomTargetLuminanceTexture = -1;
-        }
-        if (qcomRefLuminanceFBO != -1) {
-            GLES20.glDeleteFramebuffers(1, new int[]{qcomRefLuminanceFBO}, 0);
-            qcomRefLuminanceFBO = -1;
-        }
-        if (qcomTargetLuminanceFBO != -1) {
-            GLES20.glDeleteFramebuffers(1, new int[]{qcomTargetLuminanceFBO}, 0);
-            qcomTargetLuminanceFBO = -1;
-        }
-        if (qcomLuminanceProgram != -1) {
-            GLES20.glDeleteProgram(qcomLuminanceProgram);
-            qcomLuminanceProgram = -1;
-        }
+        LogString("Effect cleaned up");
     }
 
     public boolean isEnabled() { return isEnabled; }
@@ -807,7 +811,6 @@ public class FrameGenerationEffect extends Effect {
         int newTexture = textures[0];
 
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, newTexture);
-        // glTexImage2D, not glTexStorage2D
         GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES30.GL_RGBA8,
                 width, height, 0, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, null);
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
@@ -860,26 +863,26 @@ public class FrameGenerationEffect extends Effect {
         hasSecondFrame = false;
         waitingForSecondFrame = true;
         lastRealFrameTimeNs = 0;
-        lastAnyFrameShownTimeNs = 0;
-        nextFrameTimeNs = 0;
         currentDisplayFrameType = 0;
         currentFrameDisplayCount = 0;
 
         currentRealFrameCaptured = false;
         currentRealFrameIndex = 0;
 
-        if (capturedRealFrame != -1) {
+        if (capturedRealFrame != -1 && !isWorkerTexture(capturedRealFrame)) {
             GLES20.glDeleteTextures(1, new int[]{capturedRealFrame}, 0);
         }
         capturedRealFrame = -1;
         hasCapturedFrame = false;
         skipFirstRealDisplay = false;
+        useDisFlow = false;
     }
 
     public boolean isReadyForGeneration() {
         return hasFirstFrame && hasSecondFrame && texturePrev != -1 && textureCurr != -1;
     }
 
+    // QCOM
     private void ensureQCOMMotionTextures(int width, int height) {
         // Align by block — QCOM requires multiplicity
         lumaWidth = (int)(width * motionScale / qcomSearchBlockX) * qcomSearchBlockX;
@@ -938,11 +941,11 @@ public class FrameGenerationEffect extends Effect {
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
         }
-        if (qcomMotionTexture == -1) {
+        if (motionTexture == -1) {
             int[] tex = new int[1];
             GLES20.glGenTextures(1, tex, 0);
-            qcomMotionTexture = tex[0];
-            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, qcomMotionTexture);
+            motionTexture = tex[0];
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, motionTexture);
             GLES30.glTexStorage2D(GLES20.GL_TEXTURE_2D, 1, GLES30.GL_RGBA16F, motionWidth, motionHeight);
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST);
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST);
@@ -955,6 +958,231 @@ public class FrameGenerationEffect extends Effect {
         }
     }
 
+    private void copyTextureToR8(GLRenderer renderer, int srcTexture, int dstFBO, int width, int height) {
+        if (srcTexture == -1 || dstFBO == -1) return;
+
+        int[] prevFBO = new int[1];
+        GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, prevFBO, 0);
+
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, dstFBO);
+
+        // Completeness
+        int status = GLES20.glCheckFramebufferStatus(GLES20.GL_FRAMEBUFFER);
+        if (status != GLES20.GL_FRAMEBUFFER_COMPLETE) {
+            Log.e(TAG, "Luma FBO incomplete: 0x" + Integer.toHexString(status));
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, prevFBO[0]);
+            return;
+        }
+
+        GLES20.glViewport(0, 0, width, height);
+        renderer.setViewportNeedsUpdate(true);
+        GLES20.glDisable(GLES20.GL_BLEND);
+
+        lumaMaterial.use();
+        renderer.getQuadVertices().bind(lumaMaterial.programId);
+
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, srcTexture);
+        GLES20.glUniform1i(lumaMaterial.getUniformLocation("screenTexture"), 0);
+
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, renderer.quadVertices.count());
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+
+        GLES20.glEnable(GLES20.GL_BLEND);
+
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, prevFBO[0]);
+    }
+
+    private void deleteQCOMResources() {
+        if (motionTexture != -1 && !isWorkerTexture(motionTexture)) {
+            GLES20.glDeleteTextures(1, new int[]{motionTexture}, 0);
+        }
+        motionTexture = -1;
+
+        if (qcomRefLuminanceTexture != -1) {
+            GLES20.glDeleteTextures(1, new int[]{qcomRefLuminanceTexture}, 0);
+            qcomRefLuminanceTexture = -1;
+        }
+        if (qcomTargetLuminanceTexture != -1) {
+            GLES20.glDeleteTextures(1, new int[]{qcomTargetLuminanceTexture}, 0);
+            qcomTargetLuminanceTexture = -1;
+        }
+        if (qcomRefLuminanceFBO != -1) {
+            GLES20.glDeleteFramebuffers(1, new int[]{qcomRefLuminanceFBO}, 0);
+            qcomRefLuminanceFBO = -1;
+        }
+        if (qcomTargetLuminanceFBO != -1) {
+            GLES20.glDeleteFramebuffers(1, new int[]{qcomTargetLuminanceFBO}, 0);
+            qcomTargetLuminanceFBO = -1;
+        }
+        if (qcomLuminanceProgram != -1) {
+            GLES20.glDeleteProgram(qcomLuminanceProgram);
+            qcomLuminanceProgram = -1;
+        }
+    }
+
+    // DIS
+    private void handleCaptureWorkerProcess(int width, int height) {
+        if (!hasFirstFrame) {
+            copyGlToAhbTexture(workerPrevGlTex, width, height);
+            texturePrev = workerPrevGlTex;
+            textureCurr = workerCurrGlTex;
+            hasFirstFrame = true;
+            waitingForSecondFrame = true;
+            return;
+        }
+
+        if (waitingForSecondFrame) {
+            copyGlToAhbTexture(workerCurrGlTex, width, height);
+            texturePrev = workerPrevGlTex;
+            textureCurr = workerCurrGlTex;
+            hasSecondFrame = true;
+            waitingForSecondFrame = false;
+        } else {
+            blitGlTexture(workerCurrGlTex, workerPrevGlTex, width, height);
+            copyGlToAhbTexture(workerCurrGlTex, width, height);
+            texturePrev = workerPrevGlTex;
+            textureCurr = workerCurrGlTex;
+        }
+
+        frameGenClient.computeFlow(-1);
+
+        motionTexture = workerFlowGlTex;
+        useMotionEstimation = true;
+        useDisFlow = true;
+    }
+
+    private void copyGlToAhbTexture(int targetTex, int width, int height) {
+        if (targetTex == 0) return;
+
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, targetTex);
+        GLES20.glCopyTexSubImage2D(GLES20.GL_TEXTURE_2D, 0,
+                0, 0, 0, 0, width, height);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+    }
+
+    private boolean tryInitWorker(int width, int height) {
+        if (frameGenClient == null) {
+            frameGenClient = new FrameGenClient(renderer.xServerView.getContext());
+            frameGenClient.bindAsync();
+            return false;
+        }
+        if (!frameGenClient.isReady()) return false;
+
+        if (workerPrevAhb == null) {
+            int minSide = (generationMode == GENERATION_MODE_FAST) ? DIS.PRESET_FAST_MIN_SIDE
+                    : (generationMode == GENERATION_MODE_QUALITY) ? DIS.PRESET_QUALITY_MIN_SIDE
+                    : DIS.PRESET_BALANCED_MIN_SIDE;
+            int longer = Math.max(width, height);
+            int fw, fh;
+            if (longer <= minSide) { fw = width; fh = height; }
+            else {
+                float scale = (float) minSide / longer;
+                fw = Math.max(8, Math.round(width  * scale));
+                fh = Math.max(8, Math.round(height * scale));
+            }
+
+            workerPrevAhb = nativeCreateHardwareBuffer(width, height, HardwareBuffer.RGBA_8888);
+            workerCurrAhb = nativeCreateHardwareBuffer(width, height, HardwareBuffer.RGBA_8888);
+            workerFlowAhb = nativeCreateHardwareBuffer(fw, fh, /*RGBA_F16*/ 0x16);
+            if (workerPrevAhb == null || workerCurrAhb == null || workerFlowAhb == null) {
+                Log.e(TAG, "AHB alloc failed");
+                releaseWorkerResources();
+                return false;
+            }
+
+            workerPrevGlTex = nativeAhbToGlTexture(workerPrevAhb);
+            workerCurrGlTex = nativeAhbToGlTexture(workerCurrAhb);
+            workerFlowGlTex = nativeAhbToGlTexture(workerFlowAhb);
+            if (workerPrevGlTex == 0 || workerCurrGlTex == 0 || workerFlowGlTex == 0) {
+                Log.e(TAG, "AHB->GL failed");
+                releaseWorkerResources();
+                return false;
+            }
+
+            workerFlowW = fw;
+            workerFlowH = fh;
+        }
+
+        if (!frameGenClient.init(workerPrevAhb, workerCurrAhb, workerFlowAhb,
+                width, height, workerFlowW, workerFlowH)) {
+            Log.e(TAG, "worker init failed");
+            releaseWorkerResources();
+            return false;
+        }
+        return true;
+    }
+
+    private void releaseWorkerResources() {
+        if (workerPrevGlTex != 0) { GLES20.glDeleteTextures(1, new int[]{workerPrevGlTex}, 0); workerPrevGlTex = 0; }
+        if (workerCurrGlTex != 0) { GLES20.glDeleteTextures(1, new int[]{workerCurrGlTex}, 0); workerCurrGlTex = 0; }
+        if (workerFlowGlTex != 0) { GLES20.glDeleteTextures(1, new int[]{workerFlowGlTex}, 0); workerFlowGlTex = 0; }
+        if (workerPrevAhb != null) { workerPrevAhb.close(); workerPrevAhb = null; }
+        if (workerCurrAhb != null) { workerCurrAhb.close(); workerCurrAhb = null; }
+        if (workerFlowAhb != null) { workerFlowAhb.close(); workerFlowAhb = null; }
+        workerFlowW = workerFlowH = 0;
+    }
+
+    private void releaseWorkerProcess() {
+        if (frameGenClient != null) { frameGenClient.shutdown(); frameGenClient = null; }
+        if (motionTexture == workerFlowGlTex) motionTexture = -1;
+        releaseWorkerResources();
+        workerInitialized = false;
+        useWorkerProcess = false;
+        useDisFlow = false;
+    }
+
+    private void ensureInlineDisReady() {
+        disVulkan = new DIS();
+        disVulkanReady = disVulkan.init();
+        if (disVulkanReady) {
+            switch (generationMode) {
+                case GENERATION_MODE_FAST:     disVulkan.setPreset(DIS.PRESET_FAST_MIN_SIDE);     break;
+                case GENERATION_MODE_BALANCED: disVulkan.setPreset(DIS.PRESET_BALANCED_MIN_SIDE); break;
+                case GENERATION_MODE_QUALITY:  disVulkan.setPreset(DIS.PRESET_QUALITY_MIN_SIDE);  break;
+            }
+            Log.i(TAG, "DIS mode: inline fallback active");
+        } else {
+            Log.w(TAG, "DIS mode: inline DIS init failed");
+        }
+    }
+
+    private boolean isWorkerTexture(int tex) {
+        return tex != -1
+                && (tex == workerPrevGlTex
+                || tex == workerCurrGlTex
+                || tex == workerFlowGlTex);
+    }
+
+    private void blitGlTexture(int srcTex, int dstTex, int width, int height) {
+        if (srcTex == 0 || dstTex == 0) return;
+        ensureFbos();
+
+        GLES20.glBindFramebuffer(GLES30.GL_READ_FRAMEBUFFER, blitReadFbo);
+        GLES20.glFramebufferTexture2D(GLES30.GL_READ_FRAMEBUFFER,
+                GLES20.GL_COLOR_ATTACHMENT0, GLES20.GL_TEXTURE_2D, srcTex, 0);
+
+        GLES20.glBindFramebuffer(GLES30.GL_DRAW_FRAMEBUFFER, blitDrawFbo);
+        GLES20.glFramebufferTexture2D(GLES30.GL_DRAW_FRAMEBUFFER,
+                GLES20.GL_COLOR_ATTACHMENT0, GLES20.GL_TEXTURE_2D, dstTex, 0);
+
+        GLES30.glBlitFramebuffer(0, 0, width, height,
+                0, 0, width, height,
+                GLES20.GL_COLOR_BUFFER_BIT, GLES20.GL_NEAREST);
+
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
+    }
+
+    private void ensureFbos() {
+        if (blitReadFbo == 0) {
+            int[] f = new int[1];
+            GLES20.glGenFramebuffers(1, f, 0); blitReadFbo = f[0];
+            GLES20.glGenFramebuffers(1, f, 0); blitDrawFbo = f[0];
+            GLES20.glGenFramebuffers(1, f, 0); copyFbo     = f[0];
+        }
+    }
+
+    // Shaders
     private int createLuminanceCopyProgram() {
         String vertexShaderSrc =
                 "attribute vec2 aPosition;\n" +
@@ -1008,42 +1236,6 @@ public class FrameGenerationEffect extends Effect {
             return 0;
         }
         return shader;
-    }
-
-    private void copyTextureToR8(GLRenderer renderer, int srcTexture, int dstFBO, int width, int height) {
-        if (srcTexture == -1 || dstFBO == -1) return;
-
-        int[] prevFBO = new int[1];
-        GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, prevFBO, 0);
-
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, dstFBO);
-
-        // Completeness
-        int status = GLES20.glCheckFramebufferStatus(GLES20.GL_FRAMEBUFFER);
-        if (status != GLES20.GL_FRAMEBUFFER_COMPLETE) {
-            Log.e(TAG, "Luma FBO incomplete: 0x" + Integer.toHexString(status));
-            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, prevFBO[0]);
-            return;
-        }
-
-        GLES20.glViewport(0, 0, width, height);
-        renderer.setViewportNeedsUpdate(true);
-        GLES20.glDisable(GLES20.GL_BLEND);
-
-        lumaMaterial.use();
-        renderer.getQuadVertices().bind(lumaMaterial.programId);
-
-        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, srcTexture);
-        GLES20.glUniform1i(lumaMaterial.getUniformLocation("screenTexture"), 0);
-
-        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, renderer.quadVertices.count());
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
-
-        GLES20.glEnable(GLES20.GL_BLEND);
-        //renderer.invalidateBoundWindowMaterial();
-
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, prevFBO[0]);
     }
 
     private static class LumaMaterial extends ScreenMaterial {
@@ -1196,10 +1388,10 @@ public class FrameGenerationEffect extends Effect {
     } );
 
     private static final String FRAGMENT_SHADER_DEBUG_MOTION_VISUALIZATION = String.join("\n", new CharSequence[]{
-            /*"    if (uUsePostProc == 1) {",
-            "        gl_FragColor = visualizeMotion();",
-            "        return;",
-            "    }",*/
+            "    //if (uUsePostProc == 1) {",
+            "        //gl_FragColor = visualizeMotion();",
+            "        //return;",
+            "    //}",
             "",
     } );
 

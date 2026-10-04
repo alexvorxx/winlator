@@ -3,6 +3,7 @@
 #include <android/log.h>
 #include <cstring>
 #include <cmath>
+#include <unistd.h>
 
 #include "shaders/dis_downscale_rgba8_comp.spv.h"
 #include "shaders/dis_downscale_r32_comp.spv.h"
@@ -342,6 +343,21 @@ bool disVulkanInit(DisVulkanContext* ctx, EGLDisplay eglDisplay) {
         return false;
     }
 
+    const char* devExts[] = {
+            VK_ANDROID_EXTERNAL_MEMORY_ANDROID_HARDWARE_BUFFER_EXTENSION_NAME,
+            VK_KHR_EXTERNAL_FENCE_FD_EXTENSION_NAME,
+    };
+    dci.enabledExtensionCount   = 2;
+    dci.ppEnabledExtensionNames = devExts;
+
+    ctx->vkImportFenceFdKHR = (PFN_vkImportFenceFdKHR)
+            vkGetDeviceProcAddr(ctx->device, "vkImportFenceFdKHR");
+    if (!ctx->vkImportFenceFdKHR) {
+        LOGI("vkImportFenceFdKHR not available, fence sync disabled");
+    } else {
+        LOGI("vkImportFenceFdKHR loaded");
+    }
+
     // ── Load EGL extensions ──
     ctx->eglDisplay = eglDisplay;
     ctx->eglCreateImageKHR = (PFN_eglCreateImageKHR)eglGetProcAddress("eglCreateImageKHR");
@@ -478,50 +494,24 @@ static uint32_t vkToAhbFormat(VkFormat fmt) {
     }
 }
 
-bool disVulkanCreateAhbTexture(DisVulkanContext* ctx, AhbTexture* tex,
-                               int width, int height, VkFormat vkFormat) {
+static bool importAhbCommon(DisVulkanContext* ctx, AhbTexture* tex,
+                            AHardwareBuffer* ahb, int w, int h, VkFormat fmt,
+                            bool owns) {
     tex->vkDevice = ctx->device;
-    tex->width    = width;
-    tex->height   = height;
-    tex->format   = vkFormat;
+    tex->width = w; tex->height = h; tex->format = fmt;
+    tex->ahb = ahb;
+    tex->ownsAhb = owns;
 
-    // ── 1. Allocate AHardwareBuffer ──
-    AHardwareBuffer_Desc desc = {};
-    desc.width  = width;
-    desc.height = height;
-    desc.layers = 1;
-    desc.format = vkToAhbFormat(vkFormat);
-    desc.usage  = AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE |
-                  AHARDWAREBUFFER_USAGE_GPU_COLOR_OUTPUT;
+    auto getBuf = (FnEglGetNativeClientBufferANDROID)ctx->eglGetNativeClientBufferANDROID;
+    auto createImg = (FnEglCreateImageKHR)ctx->eglCreateImageKHR;
 
-    if (AHardwareBuffer_allocate(&desc, &tex->ahb) != 0) {
-        LOGE("AHardwareBuffer_allocate failed %dx%d", width, height);
-        return false;
-    }
-
-    // ── 2. Create EGL image from AHB ──
-    auto fnGetBuf = (FnEglGetNativeClientBufferANDROID)ctx->eglGetNativeClientBufferANDROID;
-    auto fnCreateImg = (FnEglCreateImageKHR)ctx->eglCreateImageKHR;
-
-    EGLClientBuffer clientBuf = fnGetBuf(tex->ahb);
-    if (!clientBuf) {
-        LOGE("eglGetNativeClientBufferANDROID failed");
-        AHardwareBuffer_release(tex->ahb);
-        tex->ahb = nullptr;
-        return false;
-    }
-
+    EGLClientBuffer cb = getBuf(ahb);
+    if (!cb) { LOGE("getNativeClientBuffer null"); return false; }
     EGLint attrs[] = { EGL_IMAGE_PRESERVED_KHR, EGL_TRUE, EGL_NONE };
-    tex->eglImage = fnCreateImg(ctx->eglDisplay, EGL_NO_CONTEXT,
-                                 EGL_NATIVE_BUFFER_ANDROID, clientBuf, attrs);
-    if (tex->eglImage == EGL_NO_IMAGE_KHR) {
-        LOGE("eglCreateImageKHR failed");
-        AHardwareBuffer_release(tex->ahb);
-        tex->ahb = nullptr;
-        return false;
-    }
+    tex->eglImage = createImg(ctx->eglDisplay, EGL_NO_CONTEXT,
+                              EGL_NATIVE_BUFFER_ANDROID, cb, attrs);
+    if (tex->eglImage == EGL_NO_IMAGE_KHR) { LOGE("createImage"); return false; }
 
-    // ── 3. Create GLES texture from EGL image ──
     glGenTextures(1, &tex->glTexture);
     glBindTexture(GL_TEXTURE_2D, tex->glTexture);
     ctx->glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, tex->eglImage);
@@ -531,88 +521,98 @@ bool disVulkanCreateAhbTexture(DisVulkanContext* ctx, AhbTexture* tex,
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glBindTexture(GL_TEXTURE_2D, 0);
 
-    // ── 4. Import AHB into Vulkan ──
-    VkExternalMemoryImageCreateInfo extInfo = {};
-    extInfo.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
-    extInfo.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID;
+    VkExternalMemoryImageCreateInfo ext = {};
+    ext.sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO;
+    ext.handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID;
 
-    VkImageCreateInfo imgInfo = {};
-    imgInfo.sType       = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    imgInfo.pNext       = &extInfo;
-    imgInfo.imageType   = VK_IMAGE_TYPE_2D;
-    imgInfo.format      = vkFormat;
-    imgInfo.extent      = { (uint32_t)width, (uint32_t)height, 1 };
-    imgInfo.mipLevels   = 1;
-    imgInfo.arrayLayers = 1;
-    imgInfo.samples     = VK_SAMPLE_COUNT_1_BIT;
-    imgInfo.tiling      = VK_IMAGE_TILING_OPTIMAL;
-    imgInfo.usage       = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
-    imgInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    imgInfo.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-    if (vkCreateImage(ctx->device, &imgInfo, nullptr, &tex->vkImage) != VK_SUCCESS) {
-        LOGE("vkCreateImage (AHB) failed");
+    VkImageCreateInfo ic = {};
+    ic.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    ic.pNext = &ext;
+    ic.imageType = VK_IMAGE_TYPE_2D;
+    ic.format = fmt;
+    ic.extent = { (uint32_t)w, (uint32_t)h, 1 };
+    ic.mipLevels = 1; ic.arrayLayers = 1;
+    ic.samples = VK_SAMPLE_COUNT_1_BIT;
+    ic.tiling = VK_IMAGE_TILING_OPTIMAL;
+    ic.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
+    ic.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    ic.initialLayout = VK_IMAGE_LAYOUT_GENERAL;
+    if (vkCreateImage(ctx->device, &ic, nullptr, &tex->vkImage) != VK_SUCCESS)
         return false;
-    }
 
-    // Get AHB memory properties
-    VkAndroidHardwareBufferPropertiesANDROID ahbProps = {};
-    ahbProps.sType = VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_PROPERTIES_ANDROID;
-    ctx->vkGetAndroidHardwareBufferPropertiesANDROID(ctx->device, tex->ahb, &ahbProps);
+    VkAndroidHardwareBufferPropertiesANDROID props = {};
+    props.sType = VK_STRUCTURE_TYPE_ANDROID_HARDWARE_BUFFER_PROPERTIES_ANDROID;
+    ctx->vkGetAndroidHardwareBufferPropertiesANDROID(ctx->device, ahb, &props);
 
-    // Import AHB memory
-    VkImportAndroidHardwareBufferInfoANDROID importInfo = {};
-    importInfo.sType = VK_STRUCTURE_TYPE_IMPORT_ANDROID_HARDWARE_BUFFER_INFO_ANDROID;
-    importInfo.buffer = tex->ahb;
+    VkImportAndroidHardwareBufferInfoANDROID imp = {};
+    imp.sType = VK_STRUCTURE_TYPE_IMPORT_ANDROID_HARDWARE_BUFFER_INFO_ANDROID;
+    imp.buffer = ahb;
 
-    VkMemoryAllocateInfo allocInfo = {};
-    allocInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.pNext           = &importInfo;
-    allocInfo.allocationSize  = ahbProps.allocationSize;
-    allocInfo.memoryTypeIndex = findMemoryType(ctx->physicalDevice,
-                                               ahbProps.memoryTypeBits,
-                                               VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-    if (allocInfo.memoryTypeIndex == UINT32_MAX) {
-        // Fallback: just find any compatible type
-        allocInfo.memoryTypeIndex = __builtin_ctz(ahbProps.memoryTypeBits);
-    }
-
-    if (vkAllocateMemory(ctx->device, &allocInfo, nullptr, &tex->vkMemory) != VK_SUCCESS) {
-        LOGE("vkAllocateMemory (AHB) failed");
-        vkDestroyImage(ctx->device, tex->vkImage, nullptr);
-        tex->vkImage = VK_NULL_HANDLE;
+    VkMemoryAllocateInfo ai = {};
+    ai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    ai.pNext = &imp;
+    ai.allocationSize = props.allocationSize;
+    ai.memoryTypeIndex = findMemoryType(ctx->physicalDevice, props.memoryTypeBits,
+                                        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (ai.memoryTypeIndex == UINT32_MAX)
+        ai.memoryTypeIndex = __builtin_ctz(props.memoryTypeBits);
+    if (vkAllocateMemory(ctx->device, &ai, nullptr, &tex->vkMemory) != VK_SUCCESS)
         return false;
-    }
     vkBindImageMemory(ctx->device, tex->vkImage, tex->vkMemory, 0);
 
-    // Create view
     VkImageViewCreateInfo vi = {};
-    vi.sType      = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    vi.image      = tex->vkImage;
-    vi.viewType   = VK_IMAGE_VIEW_TYPE_2D;
-    vi.format      = vkFormat;
+    vi.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    vi.image = tex->vkImage;
+    vi.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    vi.format = fmt;
     vi.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     vi.subresourceRange.levelCount = 1;
-    vi.subresourceRange.layerCount  = 1;
+    vi.subresourceRange.layerCount = 1;
     vkCreateImageView(ctx->device, &vi, nullptr, &tex->vkView);
-
-    LOGI("AHB texture created: %dx%d, GL=%u", width, height, tex->glTexture);
     return true;
 }
 
-void disVulkanDestroyAhbTexture(DisVulkanContext* ctx, AhbTexture* tex) {
-    if (tex->vkView)   vkDestroyImageView(tex->vkDevice, tex->vkView, nullptr);
-    if (tex->vkImage)  vkDestroyImage(tex->vkDevice, tex->vkImage, nullptr);
-    if (tex->vkMemory) vkFreeMemory(tex->vkDevice, tex->vkMemory, nullptr);
+bool disVulkanCreateAhbTexture(DisVulkanContext* ctx, AhbTexture* tex,
+                               int w, int h, VkFormat fmt) {
+    AHardwareBuffer_Desc d = {};
+    d.width = w; d.height = h; d.layers = 1;
+    d.format = vkToAhbFormat(fmt);
+    d.usage = AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE
+              | AHARDWAREBUFFER_USAGE_GPU_COLOR_OUTPUT;
+    AHardwareBuffer* ahb = nullptr;
+    if (AHardwareBuffer_allocate(&d, &ahb) != 0) { LOGE("AHB_allocate"); return false; }
+    if (!importAhbCommon(ctx, tex, ahb, w, h, fmt, /*owns=*/true)) {
+        AHardwareBuffer_release(ahb);
+        return false;
+    }
+    LOGI("AHB texture created: %dx%d, GL=%u", w, h, tex->glTexture);
+    return true;
+}
 
-    auto fnDestroyImg = (FnEglDestroyImageKHR)ctx->eglDestroyImageKHR;
-    if (tex->eglImage != EGL_NO_IMAGE_KHR && fnDestroyImg) {
+bool disVulkanImportAhbTexture(DisVulkanContext* ctx, AhbTexture* tex,
+                               AHardwareBuffer* ahb, int w, int h, VkFormat fmt) {
+    return importAhbCommon(ctx, tex, ahb, w, h, fmt, /*owns=*/false);
+}
+
+void disVulkanDestroyAhbTexture(DisVulkanContext* ctx, AhbTexture* tex) {
+    if (!ctx || !tex) return;
+    if (ctx->device == VK_NULL_HANDLE) {
+
+    } else {
+        if (tex->vkView)   vkDestroyImageView(tex->vkDevice, tex->vkView, nullptr);
+        if (tex->vkImage)  vkDestroyImage(tex->vkDevice, tex->vkImage, nullptr);
+        if (tex->vkMemory) vkFreeMemory(tex->vkDevice, tex->vkMemory, nullptr);
+    }
+
+    auto fnDestroyImg = ctx->eglDestroyImageKHR
+                        ? (FnEglDestroyImageKHR)ctx->eglDestroyImageKHR : nullptr;
+    if (tex->eglImage != EGL_NO_IMAGE_KHR && fnDestroyImg && ctx->eglDisplay != EGL_NO_DISPLAY) {
         fnDestroyImg(ctx->eglDisplay, tex->eglImage);
     }
     if (tex->glTexture) {
         glDeleteTextures(1, &tex->glTexture);
     }
-    if (tex->ahb) {
+    if (tex->ahb && tex->ownsAhb) {
         AHardwareBuffer_release(tex->ahb);
     }
 
@@ -622,6 +622,7 @@ void disVulkanDestroyAhbTexture(DisVulkanContext* ctx, AhbTexture* tex) {
     tex->eglImage = EGL_NO_IMAGE_KHR;
     tex->glTexture = 0;
     tex->ahb       = nullptr;
+    tex->ownsAhb   = true;
 }
 
 GLuint disVulkanGetGlTexture(const AhbTexture* tex) {
@@ -956,7 +957,42 @@ bool disVulkanComputeFlow(DisVulkanContext* ctx,
                           AhbTexture* prevAhb, AhbTexture* currAhb,
                           AhbTexture* flowAhb,
                           int disWidth, int disHeight,
-                          bool useVR) {
+                          bool useVR, int waitFenceFd) {
+    if (!ctx->initialized) {
+        if (waitFenceFd >= 0) close(waitFenceFd);
+        return false;
+    }
+
+    if (waitFenceFd >= 0) {
+        if (ctx->vkImportFenceFdKHR) {
+            VkFenceCreateInfo fci = {};
+            fci.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+
+            VkFence inFence = VK_NULL_HANDLE;
+            if (vkCreateFence(ctx->device, &fci, nullptr, &inFence) == VK_SUCCESS) {
+                VkImportFenceFdInfoKHR imp = {};
+                imp.sType      = VK_STRUCTURE_TYPE_IMPORT_FENCE_FD_INFO_KHR;
+                imp.fence      = inFence;
+                imp.handleType = VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT;
+                imp.fd         = waitFenceFd;
+
+                VkResult ir = ctx->vkImportFenceFdKHR(ctx->device, &imp);
+                if (ir == VK_SUCCESS) {
+                    vkWaitForFences(ctx->device, 1, &inFence, VK_TRUE,
+                                    2'000'000'000ull);
+                } else {
+                    LOGE("vkImportFenceFdKHR failed: %d", ir);
+                    close(waitFenceFd);
+                }
+                vkDestroyFence(ctx->device, inFence, nullptr);
+            } else {
+                close(waitFenceFd);
+            }
+        } else {
+            close(waitFenceFd);
+        }
+    }
+
     if (!ctx->initialized) return false;
 
     // Allocate / reallocate internal resources if size changed
@@ -1196,7 +1232,6 @@ bool disVulkanComputeFlow(DisVulkanContext* ctx,
         vkResetFences(ctx->device, 1, &ctx->frameFence);
         vkQueueSubmit(ctx->queue, 1, &si, ctx->frameFence);
         vkWaitForFences(ctx->device, 1, &ctx->frameFence, VK_TRUE, UINT64_MAX);
-        vkDeviceWaitIdle(ctx->device); ////
         vkResetDescriptorPool(ctx->device, ctx->descPool, 0);
 
         disDebugCopyStage(ctx, flowAhb, view, w, h, mode, scale);
@@ -1455,7 +1490,6 @@ bool disVulkanComputeFlow(DisVulkanContext* ctx,
     vkResetFences(ctx->device, 1, &ctx->frameFence);
     vkQueueSubmit(ctx->queue, 1, &si, ctx->frameFence);
     vkWaitForFences(ctx->device, 1, &ctx->frameFence, VK_TRUE, UINT64_MAX);
-    vkDeviceWaitIdle(ctx->device); ////
 
     // Reset command buffer for next frame
     vkResetCommandBuffer(ctx->frameCmd, 0);
