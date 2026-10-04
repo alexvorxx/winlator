@@ -132,6 +132,10 @@ public class FrameGenerationEffect extends Effect {
     private int motionTexture = -1;      // RGBA16F for motion vectors
     private int qcomRefLuminanceTexture = -1;   // R8 luminance of prev frame
     private int qcomTargetLuminanceTexture = -1; // R8 luminance of curr frame
+    private final int[] qcomMotionTextures = { -1, -1 };
+    private int qcomMotionWriteIdx = 0;
+    private int qcomMotionReadIdx  = 1;
+    private int qcomMotionGenerationCount = 0;
 
     // Time
     private List<Long> realFrameIntervals = new ArrayList<>();
@@ -324,6 +328,7 @@ public class FrameGenerationEffect extends Effect {
         } else {
             useMotionEstimation = false;
             useDisFlow = false;
+            qcomMotionGenerationCount = 0;
         }
     }
 
@@ -516,17 +521,18 @@ public class FrameGenerationEffect extends Effect {
                     }
                 }
 
-                if (apiMode == API_DIS) {
-                    if (!inlineDisAttempted && disVulkan == null) {
+                if (apiMode == API_DIS || apiMode == API_QUALCOMM) {
+                    if (apiMode == API_DIS && !inlineDisAttempted && disVulkan == null) {
                         ensureInlineDisReady();
                         inlineDisAttempted = true;
                     }
 
                     if (!workerInitialized) {
-                        if (tryInitWorker(width, height)) {
+                        if (tryInitWorker(width, height, apiMode)) {
                             workerInitialized = true;
                             useWorkerProcess = true;
-                            Log.i(TAG, "DIS mode: switched to worker process");
+                            Log.i(TAG, (apiMode == API_DIS ? "DIS" : "QCOM")
+                                    + " mode: switched to worker process");
                         }
                     }
                 }
@@ -600,28 +606,28 @@ public class FrameGenerationEffect extends Effect {
                 useMotionEstimation = false;
 
                 if (useWorkerProcess && workerInitialized) {
-                    if (motionTexture != -1) {
-                        useMotionEstimation = true;
-                        useDisFlow = true;
-                    }
-                } else if (disVulkanReady && hasFirstFrame && hasSecondFrame) {
-                    if (disVulkanReady) {
-                        disVulkan.setDebugStage(DIS.DBG_OFF);
-                        GLES20.glFinish();
-                        disVulkan.computeFlow();
-                        useMotionEstimation = true;
-                        motionTexture = disVulkan.getFlowGlTexture();
-                    }
-                } else if (hasQcomMotionEstimation && !disVulkanReady) {
+                    motionTexture = workerFlowGlTex;
+                    useMotionEstimation = true;
+                    useDisFlow = (apiMode == API_DIS);
+                } else if (apiMode == API_DIS && disVulkanReady && hasFirstFrame && hasSecondFrame) {
+                    disVulkan.setDebugStage(DIS.DBG_OFF);
+                    GLES20.glFinish();
+                    disVulkan.computeFlow();
+                    useMotionEstimation = true;
+                    useDisFlow = true;
+                    motionTexture = disVulkan.getFlowGlTexture();
+                } else if (apiMode == API_QUALCOMM && hasQcomMotionEstimation && !disVulkanReady) {
                     ensureQCOMMotionTextures(width, height);
+
+                    final int writeTex = qcomMotionTextures[qcomMotionWriteIdx];
+                    final int readTex  = qcomMotionTextures[qcomMotionReadIdx];
+
                     if (qcomRefLuminanceTexture != -1 && qcomTargetLuminanceTexture != -1 &&
-                            motionTexture != -1) {
+                            writeTex != -1 && readTex != -1) {
 
                         // 1. Convert to luminance
                         copyTextureToR8(renderer, texturePrev, qcomRefLuminanceFBO, lumaWidth, lumaHeight);
-                        GLES20.glFinish();
                         copyTextureToR8(renderer, textureCurr, qcomTargetLuminanceFBO, lumaWidth, lumaHeight);
-                        GLES20.glFinish();
 
                         // Reset before QCOM
                         for (int i = 0; i < 5; i++) {
@@ -632,28 +638,23 @@ public class FrameGenerationEffect extends Effect {
                         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
                         while (GLES20.glGetError() != GLES20.GL_NO_ERROR);
 
-                        // 5. QCOM motion estimation
-                        nativeTexEstimateMotionQCOM(qcomRefLuminanceTexture, qcomTargetLuminanceTexture, motionTexture);
+                        // QCOM writes in writeTex
+                        nativeTexEstimateMotionQCOM(qcomRefLuminanceTexture, qcomTargetLuminanceTexture, writeTex);
 
                         int err = GLES20.glGetError();
                         if (err != GLES20.GL_NO_ERROR) {
                             Log.e(TAG, "nativeTexEstimateMotionQCOM error: 0x" + Integer.toHexString(err));
                             useMotionEstimation = false;
                         } else {
-                            GLES20.glFinish();
-                            useMotionEstimation = true;
-                            LogString("QCOM motion estimation OK");
+                            if (qcomMotionGenerationCount < 2) qcomMotionGenerationCount++;
+                            useMotionEstimation = (qcomMotionGenerationCount >= 2);
+
+                            motionTexture = readTex;
+
+                            int tmp = qcomMotionWriteIdx;
+                            qcomMotionWriteIdx = qcomMotionReadIdx;
+                            qcomMotionReadIdx  = tmp;
                         }
-
-                        // After copyTextureToR8 and glFinish:
-                        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, qcomRefLuminanceFBO);
-                        ByteBuffer buf = ByteBuffer.allocateDirect(4).order(ByteOrder.nativeOrder());
-                        GLES20.glReadPixels(width/2, height/2, 1, 1, GLES30.GL_RED, GLES20.GL_UNSIGNED_BYTE, buf);
-                        //Log.d(TAG, "REF_LUMA via dedicated FBO: " + (buf.get(0) & 0xFF));
-                        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
-
-                        useMotionEstimation = true;
-                        LogString("Using QCOM motion estimation");
                     }
                 }
 
@@ -735,6 +736,7 @@ public class FrameGenerationEffect extends Effect {
         }
 
         GLES20.glUniform1i(uUseDISLoc, (useDisFlow && useMotionEstimation) ? 1 : 0);
+        GLES20.glUniform1i(uUseMotionEstimationLoc, useMotionEstimation ? 1 : 0);
 
         if (uResolutionLoc != -1 && currentWidth > 0 && currentHeight > 0) {
             GLES20.glUniform2f(uResolutionLoc, currentWidth, currentHeight);
@@ -876,6 +878,7 @@ public class FrameGenerationEffect extends Effect {
         hasCapturedFrame = false;
         skipFirstRealDisplay = false;
         useDisFlow = false;
+        qcomMotionGenerationCount = 0;
     }
 
     public boolean isReadyForGeneration() {
@@ -941,16 +944,23 @@ public class FrameGenerationEffect extends Effect {
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
         }
-        if (motionTexture == -1) {
-            int[] tex = new int[1];
-            GLES20.glGenTextures(1, tex, 0);
-            motionTexture = tex[0];
-            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, motionTexture);
-            GLES30.glTexStorage2D(GLES20.GL_TEXTURE_2D, 1, GLES30.GL_RGBA16F, motionWidth, motionHeight);
-            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST);
-            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST);
-            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
-            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
+        if (qcomMotionTextures[0] == -1) {
+            int[] tex = new int[2];
+            GLES20.glGenTextures(2, tex, 0);
+            qcomMotionTextures[0] = tex[0];
+            qcomMotionTextures[1] = tex[1];
+            for (int i = 0; i < 2; i++) {
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, qcomMotionTextures[i]);
+                GLES30.glTexStorage2D(GLES20.GL_TEXTURE_2D, 1, GLES30.GL_RGBA16F, motionWidth, motionHeight);
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST);
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST);
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
+            }
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+            qcomMotionWriteIdx = 0;
+            qcomMotionReadIdx  = 1;
+            qcomMotionGenerationCount = 0;
         }
 
         if (qcomLuminanceProgram == -1) {
@@ -994,9 +1004,15 @@ public class FrameGenerationEffect extends Effect {
     }
 
     private void deleteQCOMResources() {
-        if (motionTexture != -1 && !isWorkerTexture(motionTexture)) {
-            GLES20.glDeleteTextures(1, new int[]{motionTexture}, 0);
+        if (qcomMotionTextures[0] != -1) {
+            GLES20.glDeleteTextures(2, qcomMotionTextures, 0);
+            qcomMotionTextures[0] = -1;
+            qcomMotionTextures[1] = -1;
         }
+        qcomMotionWriteIdx = 0;
+        qcomMotionReadIdx  = 1;
+        qcomMotionGenerationCount = 0;
+
         motionTexture = -1;
 
         if (qcomRefLuminanceTexture != -1) {
@@ -1022,6 +1038,22 @@ public class FrameGenerationEffect extends Effect {
     }
 
     // DIS
+    private void ensureInlineDisReady() {
+        disVulkan = new DIS();
+        disVulkanReady = disVulkan.init();
+        if (disVulkanReady) {
+            switch (generationMode) {
+                case GENERATION_MODE_FAST:     disVulkan.setPreset(DIS.PRESET_FAST_MIN_SIDE);     break;
+                case GENERATION_MODE_BALANCED: disVulkan.setPreset(DIS.PRESET_BALANCED_MIN_SIDE); break;
+                case GENERATION_MODE_QUALITY:  disVulkan.setPreset(DIS.PRESET_QUALITY_MIN_SIDE);  break;
+            }
+            Log.i(TAG, "DIS mode: inline fallback active");
+        } else {
+            Log.w(TAG, "DIS mode: inline DIS init failed");
+        }
+    }
+
+    // Worker
     private void handleCaptureWorkerProcess(int width, int height) {
         if (!hasFirstFrame) {
             copyGlToAhbTexture(workerPrevGlTex, width, height);
@@ -1049,7 +1081,6 @@ public class FrameGenerationEffect extends Effect {
 
         motionTexture = workerFlowGlTex;
         useMotionEstimation = true;
-        useDisFlow = true;
     }
 
     private void copyGlToAhbTexture(int targetTex, int width, int height) {
@@ -1061,7 +1092,7 @@ public class FrameGenerationEffect extends Effect {
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
     }
 
-    private boolean tryInitWorker(int width, int height) {
+    private boolean tryInitWorker(int width, int height, int apiMode) {
         if (frameGenClient == null) {
             frameGenClient = new FrameGenClient(renderer.xServerView.getContext());
             frameGenClient.bindAsync();
@@ -1070,43 +1101,57 @@ public class FrameGenerationEffect extends Effect {
         if (!frameGenClient.isReady()) return false;
 
         if (workerPrevAhb == null) {
-            int minSide = (generationMode == GENERATION_MODE_FAST) ? DIS.PRESET_FAST_MIN_SIDE
-                    : (generationMode == GENERATION_MODE_QUALITY) ? DIS.PRESET_QUALITY_MIN_SIDE
-                    : DIS.PRESET_BALANCED_MIN_SIDE;
-            int longer = Math.max(width, height);
             int fw, fh;
-            if (longer <= minSide) { fw = width; fh = height; }
-            else {
-                float scale = (float) minSide / longer;
-                fw = Math.max(8, Math.round(width  * scale));
-                fh = Math.max(8, Math.round(height * scale));
+
+            if (apiMode == API_QUALCOMM) {
+                final int blockX = Math.max(1, qcomSearchBlockX);
+                final int blockY = Math.max(1, qcomSearchBlockY);
+
+                int lw = (int)(width  * motionScale / blockX) * blockX;
+                int lh = (int)(height * motionScale / blockY) * blockY;
+                if (lw < 8) lw = 8;
+                if (lh < 8) lh = 8;
+
+                fw = Math.max(1, lw / blockX);
+                fh = Math.max(1, lh / blockY);
+
+                Log.i(TAG, "QCOM flow AHB size: " + fw + "x" + fh
+                        + " (luma " + lw + "x" + lh + ", block " + blockX + "x" + blockY
+                        + ", motionScale " + motionScale + ")");
+            } else {
+                // DIS: flow = DIS resolution
+                int minSide = (generationMode == GENERATION_MODE_FAST) ? DIS.PRESET_FAST_MIN_SIDE
+                        : (generationMode == GENERATION_MODE_QUALITY) ? DIS.PRESET_QUALITY_MIN_SIDE
+                        : DIS.PRESET_BALANCED_MIN_SIDE;
+                int longer = Math.max(width, height);
+                if (longer <= minSide) { fw = width; fh = height; }
+                else {
+                    float scale = (float) minSide / longer;
+                    fw = Math.max(8, Math.round(width  * scale));
+                    fh = Math.max(8, Math.round(height * scale));
+                }
             }
 
             workerPrevAhb = nativeCreateHardwareBuffer(width, height, HardwareBuffer.RGBA_8888);
             workerCurrAhb = nativeCreateHardwareBuffer(width, height, HardwareBuffer.RGBA_8888);
-            workerFlowAhb = nativeCreateHardwareBuffer(fw, fh, /*RGBA_F16*/ 0x16);
+            workerFlowAhb = nativeCreateHardwareBuffer(fw, fh, 0x16);
             if (workerPrevAhb == null || workerCurrAhb == null || workerFlowAhb == null) {
-                Log.e(TAG, "AHB alloc failed");
                 releaseWorkerResources();
                 return false;
             }
-
             workerPrevGlTex = nativeAhbToGlTexture(workerPrevAhb);
             workerCurrGlTex = nativeAhbToGlTexture(workerCurrAhb);
             workerFlowGlTex = nativeAhbToGlTexture(workerFlowAhb);
             if (workerPrevGlTex == 0 || workerCurrGlTex == 0 || workerFlowGlTex == 0) {
-                Log.e(TAG, "AHB->GL failed");
                 releaseWorkerResources();
                 return false;
             }
-
             workerFlowW = fw;
             workerFlowH = fh;
         }
 
         if (!frameGenClient.init(workerPrevAhb, workerCurrAhb, workerFlowAhb,
-                width, height, workerFlowW, workerFlowH)) {
-            Log.e(TAG, "worker init failed");
+                width, height, workerFlowW, workerFlowH, apiMode)) {
             releaseWorkerResources();
             return false;
         }
@@ -1130,21 +1175,6 @@ public class FrameGenerationEffect extends Effect {
         workerInitialized = false;
         useWorkerProcess = false;
         useDisFlow = false;
-    }
-
-    private void ensureInlineDisReady() {
-        disVulkan = new DIS();
-        disVulkanReady = disVulkan.init();
-        if (disVulkanReady) {
-            switch (generationMode) {
-                case GENERATION_MODE_FAST:     disVulkan.setPreset(DIS.PRESET_FAST_MIN_SIDE);     break;
-                case GENERATION_MODE_BALANCED: disVulkan.setPreset(DIS.PRESET_BALANCED_MIN_SIDE); break;
-                case GENERATION_MODE_QUALITY:  disVulkan.setPreset(DIS.PRESET_QUALITY_MIN_SIDE);  break;
-            }
-            Log.i(TAG, "DIS mode: inline fallback active");
-        } else {
-            Log.w(TAG, "DIS mode: inline DIS init failed");
-        }
     }
 
     private boolean isWorkerTexture(int tex) {

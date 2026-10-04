@@ -19,7 +19,7 @@ public class FrameGenService extends Service {
 
     private static native boolean nativeServiceInit(
             HardwareBuffer prev, HardwareBuffer curr, HardwareBuffer flow,
-            int width, int height, int flowWidth, int flowHeight);
+            int width, int height, int flowWidth, int flowHeight, int apiMode);
     private static native boolean nativeServiceComputeFlow(ParcelFileDescriptor fenceFd);
     private static native void    nativeServiceShutdown();
     private static native void nativeServiceDestroy();
@@ -35,16 +35,14 @@ public class FrameGenService extends Service {
         public boolean isReady() { return initialized; }
 
         @Override
-        public void init(HardwareBuffer prev, HardwareBuffer curr, HardwareBuffer flow,
-                         int width, int height, int flowWidth, int flowHeight) {
-            Log.i(TAG, "init pid=" + android.os.Process.myPid());
-
-            workerHandler.post(() -> {
-                boolean ok = nativeServiceInit(prev, curr, flow,
-                        width, height, flowWidth, flowHeight);
-                initialized = ok;
-                Log.i(TAG, "nativeServiceInit result=" + ok);
-            });
+        public boolean init(HardwareBuffer prev, HardwareBuffer curr, HardwareBuffer flow,
+                            int width, int height, int flowWidth, int flowHeight, int apiMode) {
+            Log.i(TAG, "init pid=" + android.os.Process.myPid() + " apiMode=" + apiMode);
+            Boolean r = runOnWorker(() -> nativeServiceInit(prev, curr, flow,
+                    width, height, flowWidth, flowHeight, apiMode));
+            initialized = (r != null && r);
+            Log.i(TAG, "nativeServiceInit result=" + initialized);
+            return initialized;
         }
 
         @Override

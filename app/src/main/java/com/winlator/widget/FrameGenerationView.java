@@ -378,7 +378,7 @@ public class FrameGenerationView extends FrameLayout {
         int fps_spinner_position = prefs.getInt("fps_spinner_position", 4);
         generationMode = prefs.getInt("mode_spinner_position", FrameGenerationEffect.GENERATION_MODE_BALANCED);
         fpsMultiplier = prefs.getInt("fps_multiplier", FrameGenerationEffect.FPS_MULTIPLIER_X2);
-        apiMode = prefs.getInt("api_mode", FrameGenerationEffect.API_QUALCOMM);
+        apiMode = prefs.getInt("api_mode", FrameGenerationEffect.API_DIS);
         usePostProcessing = prefs.getBoolean("use_post_processing", false);
         blendModeAuto = prefs.getBoolean("blend_mode_auto", true);
         motionScale = prefs.getFloat("motion_scale", FrameGenerationEffect.DEFAULT_MOTION_SCALE);

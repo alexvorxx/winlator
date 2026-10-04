@@ -68,22 +68,24 @@ foreach(SHADER ${DIS_SHADERS})
 endforeach()
 add_custom_target(dis_shaders DEPENDS ${DIS_SHADER_HEADERS})
 
-# ── DIS Vulkan library ──
-add_library(dis_vulkan STATIC
+# ── Frame generation library ──
+add_library(framegen STATIC
         dis/dis.cpp
         dis/dis_jni.cpp
+        qcom/qcom.cpp
         winlator/framegen_service.cpp
         winlator/framegen_jni.cpp
 )
-add_dependencies(dis_vulkan dis_shaders)
+add_dependencies(framegen dis_shaders)
 
-target_compile_definitions(dis_vulkan PRIVATE VK_USE_PLATFORM_ANDROID_KHR)
-target_include_directories(dis_vulkan PRIVATE
+target_compile_definitions(framegen PRIVATE VK_USE_PLATFORM_ANDROID_KHR)
+target_include_directories(framegen PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/dis
+        ${CMAKE_CURRENT_SOURCE_DIR}/qcom
         ${CMAKE_CURRENT_BINARY_DIR}/dis_gen
 )
-target_link_libraries(dis_vulkan
+target_link_libraries(framegen
         android
         EGL
         GLESv2
@@ -108,10 +110,9 @@ add_library(winlator SHARED
             winlator/xoutput_stream.c
             winlator/alsa_client.c
             winlator/patchelf_wrapper.cpp
-            winlator/qcom.cpp
 )
 
-add_dependencies(winlator dis_vulkan)
+add_dependencies(winlator framegen)
 target_compile_options(winlator PRIVATE -Wall -Wextra)
 target_compile_definitions(winlator PRIVATE
         VK_USE_PLATFORM_ANDROID_KHR
@@ -119,7 +120,7 @@ target_compile_definitions(winlator PRIVATE
 
 target_link_libraries(winlator
                       -Wl,--whole-archive
-                      dis_vulkan
+                      framegen
                       -Wl,--no-whole-archive
                       log
                       android

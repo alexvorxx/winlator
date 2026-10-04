@@ -52,11 +52,10 @@ public class FrameGenClient {
     public boolean isReady() { return bound && service != null; }
 
     public boolean init(HardwareBuffer prev, HardwareBuffer curr, HardwareBuffer flow,
-                        int w, int h, int fw, int fh) {
+                        int w, int h, int fw, int fh, int apiMode) {
         if (!isReady()) return false;
         try {
-            service.init(prev, curr, flow, w, h, fw, fh);
-            return true;
+            return service.init(prev, curr, flow, w, h, fw, fh, apiMode);
         } catch (Exception e) {
             Log.e(TAG, "init failed", e);
             return false;

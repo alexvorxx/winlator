@@ -393,7 +393,7 @@ public class ScreenEffectDialog extends ContentDialog {
                 SharedPreferences prefs = getContext().getSharedPreferences("frame_generation", Context.MODE_PRIVATE);
                 int generationMode = prefs.getInt("mode_spinner_position", FrameGenerationEffect.GENERATION_MODE_BALANCED);
                 int fpsMultiplier = prefs.getInt("fps_multiplier", FrameGenerationEffect.FPS_MULTIPLIER_X2);
-                int apiMode = prefs.getInt("api_mode", FrameGenerationEffect.API_QUALCOMM);
+                int apiMode = prefs.getInt("api_mode", FrameGenerationEffect.API_DIS);
                 boolean usePostProcessing = prefs.getBoolean("use_post_processing", false);
                 boolean blendModeAuto = prefs.getBoolean("blend_mode_auto", true);
                 float motionScale = prefs.getFloat("motion_scale", FrameGenerationEffect.DEFAULT_MOTION_SCALE);

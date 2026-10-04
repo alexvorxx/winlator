@@ -5,8 +5,10 @@
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <GLES3/gl3.h>
+#include <unistd.h>
 
 #include "dis.h"
+#include "qcom.h"
 
 #define LOG_TAG "FrameGenSvcNative"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO,  LOG_TAG, __VA_ARGS__)
@@ -28,6 +30,9 @@ namespace {
         int width = 0, height = 0, flowWidth = 0, flowHeight = 0;
         bool initialized = false;
         bool disReady = false;
+
+        int apiMode = 0;               // 0=DIS, 1=QCOM
+        QcomWorkerCtx qcom = {};
     };
     WorkerState g;
 
@@ -82,30 +87,33 @@ extern "C" {
 JNIEXPORT jboolean JNICALL
 Java_com_winlator_renderer_FrameGenService_nativeServiceInit(
         JNIEnv* env, jclass, jobject jPrev, jobject jCurr, jobject jFlow,
-        jint width, jint height, jint flowWidth, jint flowHeight) {
+        jint width, jint height, jint flowWidth, jint flowHeight, jint apiMode) {
+
+    LOGI("nativeServiceInit: %dx%d flow %dx%d api=%d",
+         width, height, flowWidth, flowHeight, apiMode);
 
     AHardwareBuffer* prev = AHardwareBuffer_fromHardwareBuffer(env, jPrev);
     AHardwareBuffer* curr = AHardwareBuffer_fromHardwareBuffer(env, jCurr);
     AHardwareBuffer* flow = AHardwareBuffer_fromHardwareBuffer(env, jFlow);
-    if (!prev || !curr || !flow) {
-        LOGE("fromHardwareBuffer null: prev=%p curr=%p flow=%p", prev, curr, flow);
-        return JNI_FALSE;
-    }
+    if (!prev || !curr || !flow) { LOGE("AHB null"); return JNI_FALSE; }
 
-    if (g.initialized && g.prevAhb == prev && g.currAhb == curr && g.flowAhb == flow) {
+    if (g.initialized && g.apiMode == apiMode &&
+        g.prevAhb == prev && g.currAhb == curr && g.flowAhb == flow) {
         LOGI("nativeServiceInit: same AHB, no-op");
         return JNI_TRUE;
     }
 
     if (g.initialized) {
-        LOGI("nativeServiceInit: reinit with new AHB");
-        if (g.disReady) {
+        if (g.apiMode == 0 && g.disReady) {
             disVulkanDestroyAhbTexture(&g.disCtx, &g.disPrev);
             disVulkanDestroyAhbTexture(&g.disCtx, &g.disCurr);
             disVulkanDestroyAhbTexture(&g.disCtx, &g.disFlow);
             g.disReady = false;
+        } else if (g.apiMode == 1) {
+            qcomWorkerDestroy(&g.qcom);
         }
         releaseAhbs();
+        g.initialized = false;
     }
 
     AHardwareBuffer_acquire(prev);
@@ -114,6 +122,7 @@ Java_com_winlator_renderer_FrameGenService_nativeServiceInit(
     g.prevAhb = prev; g.currAhb = curr; g.flowAhb = flow;
     g.width = width; g.height = height;
     g.flowWidth = flowWidth; g.flowHeight = flowHeight;
+    g.apiMode = apiMode;
 
     if (g.display == EGL_NO_DISPLAY) {
         if (!createEglContext()) { releaseAhbs(); return JNI_FALSE; }
@@ -121,28 +130,42 @@ Java_com_winlator_renderer_FrameGenService_nativeServiceInit(
         eglMakeCurrent(g.display, g.surface, g.surface, g.context);
     }
 
-    if (!g.disCtx.initialized) {
-        if (!disVulkanInit(&g.disCtx, g.display)) {
-            LOGE("disVulkanInit failed");
-            destroyEglContext(); releaseAhbs();
+    if (apiMode == 0) {
+        // DIS/Vulkan
+        if (!g.disCtx.initialized) {
+            if (!disVulkanInit(&g.disCtx, g.display)) {
+                LOGE("disVulkanInit failed");
+                releaseAhbs();
+                return JNI_FALSE;
+            }
+        }
+        if (!disVulkanImportAhbTexture(&g.disCtx, &g.disPrev, prev,
+                                       width, height, VK_FORMAT_R8G8B8A8_UNORM) ||
+            !disVulkanImportAhbTexture(&g.disCtx, &g.disCurr, curr,
+                                       width, height, VK_FORMAT_R8G8B8A8_UNORM) ||
+            !disVulkanImportAhbTexture(&g.disCtx, &g.disFlow, flow,
+                                       flowWidth, flowHeight, VK_FORMAT_R16G16B16A16_SFLOAT)) {
+            LOGE("DIS import AHB failed");
+            releaseAhbs();
+            return JNI_FALSE;
+        }
+        g.disReady = true;
+    } else {
+        if (!qcomWorkerInit(&g.qcom, width, height, flowWidth, flowHeight)) {
+            LOGE("qcomWorkerInit failed");
+            releaseAhbs();
+            return JNI_FALSE;
+        }
+        if (!qcomWorkerBindAhb(&g.qcom, prev, curr, flow)) {
+            LOGE("qcomWorkerBindAhb failed");
+            qcomWorkerDestroy(&g.qcom);
+            releaseAhbs();
             return JNI_FALSE;
         }
     }
 
-    if (!disVulkanImportAhbTexture(&g.disCtx, &g.disPrev, prev,
-                                   width, height, VK_FORMAT_R8G8B8A8_UNORM) ||
-        !disVulkanImportAhbTexture(&g.disCtx, &g.disCurr, curr,
-                                   width, height, VK_FORMAT_R8G8B8A8_UNORM) ||
-        !disVulkanImportAhbTexture(&g.disCtx, &g.disFlow, flow,
-                                   flowWidth, flowHeight, VK_FORMAT_R16G16B16A16_SFLOAT)) {
-        LOGE("import AHB failed");
-        releaseAhbs();
-        return JNI_FALSE;
-    }
-
     g.initialized = true;
-    g.disReady = true;
-    LOGI("nativeServiceInit done (reinit=%d)", g.initialized);
+    LOGI("nativeServiceInit done");
     return JNI_TRUE;
 }
 
@@ -150,7 +173,7 @@ JNIEXPORT jboolean JNICALL
 Java_com_winlator_renderer_FrameGenService_nativeServiceComputeFlow(
         JNIEnv* env, jclass, jobject jFencePfd) {
 
-    if (!g.initialized || !g.disReady) return JNI_FALSE;
+    if (!g.initialized) return JNI_FALSE;
 
     int fenceFd = -1;
     if (jFencePfd != nullptr) {
@@ -162,20 +185,30 @@ Java_com_winlator_renderer_FrameGenService_nativeServiceComputeFlow(
 
     eglMakeCurrent(g.display, g.surface, g.surface, g.context);
 
-    bool ok = disVulkanComputeFlow(&g.disCtx, &g.disPrev, &g.disCurr, &g.disFlow,
-                                   g.flowWidth, g.flowHeight, /*useVR=*/true,
-                                   fenceFd);
+    bool ok = false;
+    if (g.apiMode == 0) {
+        ok = disVulkanComputeFlow(&g.disCtx, &g.disPrev, &g.disCurr, &g.disFlow,
+                                  g.flowWidth, g.flowHeight, /*useVR=*/true, fenceFd);
+    } else {
+        if (fenceFd >= 0) close(fenceFd);
+        ok = qcomWorkerComputeFlow(&g.qcom);
+    }
     return ok ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT void JNICALL
 Java_com_winlator_renderer_FrameGenService_nativeServiceShutdown(JNIEnv*, jclass) {
-    if (g.disReady) {
+    if (!g.initialized) return;
+
+    if (g.apiMode == 0 && g.disReady) {
         disVulkanDestroyAhbTexture(&g.disCtx, &g.disPrev);
         disVulkanDestroyAhbTexture(&g.disCtx, &g.disCurr);
         disVulkanDestroyAhbTexture(&g.disCtx, &g.disFlow);
         g.disReady = false;
+    } else if (g.apiMode == 1) {
+        qcomWorkerDestroy(&g.qcom);
     }
+
     releaseAhbs();
     g.initialized = false;
     LOGI("shutdown done (context kept)");
@@ -183,9 +216,8 @@ Java_com_winlator_renderer_FrameGenService_nativeServiceShutdown(JNIEnv*, jclass
 
 JNIEXPORT void JNICALL
 Java_com_winlator_renderer_FrameGenService_nativeServiceDestroy(JNIEnv*, jclass) {
-    if (g.disCtx.initialized) {
-        disVulkanCleanup(&g.disCtx);
-    }
+    if (g.disCtx.initialized) disVulkanCleanup(&g.disCtx);
+    qcomWorkerDestroy(&g.qcom);
     destroyEglContext();
     LOGI("service destroyed");
 }
